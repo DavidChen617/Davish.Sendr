@@ -13,8 +13,8 @@
     <Authors>David Chen</Authors>
     <Copyright>Copyright (c) 2026 David Chen</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/OWNER/sendr</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/OWNER/sendr</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/DavidChen617/Davish.Sendr</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DavidChen617/Davish.Sendr</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>mediator;cqrs;mediatr;sender;pipeline</PackageTags>
