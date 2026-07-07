@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sendr.Abstractions/Sendr.Abstractions.csproj" />
+    <Project Path="src/Sendr/Sendr.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Davish.Sendr.Abstractions</PackageId>
+    <AssemblyName>Davish.Sendr.Abstractions</AssemblyName>
+    <Description>Abstractions (contracts) for Davish.Sendr — IRequest, IRequestHandler, IRequestDecorator, ISender.</Description>
+  </PropertyGroup>
+
+</Project>

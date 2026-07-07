@@ -1,0 +1,20 @@
+#!/bin/sh
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.cs$')
+
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+INCLUDE_ARGS=""
+for FILE in $STAGED_FILES; do
+  INCLUDE_ARGS="$INCLUDE_ARGS --include $FILE"
+done
+
+dotnet format $INCLUDE_ARGS
+
+for FILE in $STAGED_FILES; do
+  git add "$FILE"
+done
+
+echo "Format check passed."
