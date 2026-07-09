@@ -3,10 +3,27 @@ using System.Linq.Expressions;
 
 namespace Davish.Sendr;
 
+/// <summary>
+/// Dispatches requests to their registered handlers, running any configured decorator pipeline.
+/// Resolve an instance from the service provider after calling <c>AddSendr</c>.
+/// </summary>
 public interface ISender
 {
+    /// <summary>
+    /// Dispatches a request that does not produce a response value to its handler.
+    /// </summary>
+    /// <param name="request">The request to dispatch.</param>
+    /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
+    /// <returns>A task that completes when the request has been handled.</returns>
     Task SendAsync(IRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Dispatches a request to its handler and returns the produced response.
+    /// </summary>
+    /// <typeparam name="TResponse">The type of response expected from the request.</typeparam>
+    /// <param name="request">The request to dispatch.</param>
+    /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
+    /// <returns>A task that resolves to the response produced for the request.</returns>
     Task<TResponse> SendAsync<TResponse>(
         IRequest<TResponse> request,
         CancellationToken cancellationToken = default);
