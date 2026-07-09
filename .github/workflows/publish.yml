@@ -33,7 +33,7 @@ jobs:
       - name: Pack
         run: dotnet pack -c Release -o out ${PKG_VERSION:+-p:Version=$PKG_VERSION}
 
-      - name: NuGet login (OIDC → 臨時 API key)
+      - name: NuGet login (OIDC)
         uses: NuGet/login@v1
         id: login
         with:
