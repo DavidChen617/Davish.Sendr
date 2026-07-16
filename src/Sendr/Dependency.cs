@@ -1,4 +1,5 @@
-﻿using Davish.Sendr;
+using Davish.Sendr;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -22,22 +23,18 @@ public static class Dependency
 
         /// <summary>
         /// Registers a handler for the request/response pair, optionally wrapping it with a
-        /// decorator pipeline.
+        /// decorator pipeline configured via <see cref="RequestHandlerOptions{TRequest, TResponse}.Decorator"/>.
         /// </summary>
         /// <typeparam name="TRequest">The request type handled by <typeparamref name="THandler"/>.</typeparam>
         /// <typeparam name="TResponse">The response type produced for the request.</typeparam>
         /// <typeparam name="THandler">The concrete handler implementation to register.</typeparam>
         /// <param name="configure">
         /// An optional callback to configure the handler, such as attaching decorators via
-        /// <see cref="RequestHandlerOptions.UseDecorators"/>.
+        /// <c>x.Decorator.With&lt;TDecorator&gt;()</c>.
         /// </param>
         /// <returns>The same <see cref="IServiceCollection"/> so that calls can be chained.</returns>
-        /// <exception cref="InvalidOperationException">
-        /// Thrown when the handler is resolved (not at registration time) if any configured decorator
-        /// type does not implement <see cref="IRequestDecorator{TRequest, TResponse}"/> for this
-        /// request/response pair.
-        /// </exception>
-        public IServiceCollection AddRequestHandler<TRequest, TResponse, THandler>(Action<RequestHandlerOptions>? configure = null)
+        public IServiceCollection AddRequestHandler<TRequest, TResponse, THandler>(
+            Action<RequestHandlerOptions<TRequest, TResponse>>? configure = null)
             where TRequest : IRequest<TResponse>
             where THandler : class, IRequestHandler<TRequest, TResponse>
         {
@@ -45,8 +42,11 @@ public static class Dependency
 
             services.AddTransient<THandler>();
 
-            var options = new RequestHandlerOptions();
+            var options = new RequestHandlerOptions<TRequest, TResponse>();
             configure?.Invoke(options);
+
+            foreach (var decoratorType in options.Decorators)
+                services.TryAddTransient(decoratorType);
 
             services.AddTransient<IRequestHandler<TRequest, TResponse>>(pv =>
             {
@@ -54,13 +54,50 @@ public static class Dependency
 
                 foreach (var decoratorType in options.Decorators)
                 {
-                    var closed = decoratorType.MakeGenericType(typeof(TRequest), typeof(TResponse));
+                    var decorator = (IRequestDecorator.WithResponse)pv.GetRequiredService(decoratorType);
+                    handler = new DecoratorHandlerImpl<TRequest, TResponse>(decorator, handler);
+                }
 
-                    if (!typeof(IRequestDecorator<TRequest, TResponse>).IsAssignableFrom(closed))
-                        throw new InvalidOperationException(
-                            $"{decoratorType.Name} Not a valid decorator, must implement IRequestDecorator<TRequest, TResponse>.");
+                return handler;
+            });
 
-                    handler = (IRequestHandler<TRequest, TResponse>)ActivatorUtilities.CreateInstance(pv, closed, handler);
+            return services;
+        }
+
+        /// <summary>
+        /// Registers a handler for the request, optionally wrapping it with a
+        /// decorator pipeline configured via <see cref="RequestHandlerOptions{TRequest}.Decorator"/>.
+        /// </summary>
+        /// <typeparam name="TRequest">The request type handled by <typeparamref name="THandler"/>.</typeparam>
+        /// <typeparam name="THandler">The concrete handler implementation to register.</typeparam>
+        /// <param name="configure">
+        /// An optional callback to configure the handler, such as attaching decorators via
+        /// <c>x.Decorator.With&lt;TDecorator&gt;()</c>.
+        /// </param>
+        /// <returns>The same <see cref="IServiceCollection"/> so that calls can be chained.</returns>
+        public IServiceCollection AddRequestHandler<TRequest, THandler>(
+            Action<RequestHandlerOptions<TRequest>>? configure = null)
+            where TRequest : IRequest
+            where THandler : class, IRequestHandler<TRequest>
+        {
+            HandlersCache.GetOrCreate(typeof(TRequest));
+
+            services.AddTransient<THandler>();
+
+            var options = new RequestHandlerOptions<TRequest>();
+            configure?.Invoke(options);
+
+            foreach (var decoratorType in options.Decorators)
+                services.TryAddTransient(decoratorType);
+
+            services.AddTransient<IRequestHandler<TRequest>>(pv =>
+            {
+                IRequestHandler<TRequest> handler = pv.GetRequiredService<THandler>();
+
+                foreach (var decoratorType in options.Decorators)
+                {
+                    var decorator = (IRequestDecorator)pv.GetRequiredService(decoratorType);
+                    handler = new DecoratorHandlerImpl<TRequest>(decorator, handler);
                 }
 
                 return handler;
@@ -72,24 +109,91 @@ public static class Dependency
 }
 
 /// <summary>
+/// Configures how a request/response handler is registered, most notably the decorator
+/// pipeline applied around it.
+/// </summary>
+/// <typeparam name="TRequest">The request type being handled.</typeparam>
+/// <typeparam name="TResponse">The response type produced for the request.</typeparam>
+public sealed class RequestHandlerOptions<TRequest, TResponse>
+    where TRequest : IRequest<TResponse>
+{
+    internal Stack<Type> Decorators { get; } = new();
+
+    /// <summary>
+    /// Fluent entry point for attaching decorators, for example
+    /// <c>x.Decorator.With&lt;LoggingDecorator&gt;()</c>.
+    /// </summary>
+    public DecoratorBuilder<TRequest, TResponse> Decorator => new(this);
+}
+
+/// <summary>
+/// Fluent builder for adding decorators to a <see cref="RequestHandlerOptions{TRequest, TResponse}"/>.
+/// </summary>
+/// <typeparam name="TRequest">The request type being handled.</typeparam>
+/// <typeparam name="TResponse">The response type produced for the request.</typeparam>
+public sealed class DecoratorBuilder<TRequest, TResponse>
+    where TRequest : IRequest<TResponse>
+{
+    private readonly RequestHandlerOptions<TRequest, TResponse> _options;
+
+    internal DecoratorBuilder(RequestHandlerOptions<TRequest, TResponse> options) => _options = options;
+
+    /// <summary>
+    /// Adds a decorator to wrap the handler. Decorators execute in the order added (FIFO):
+    /// the first decorator added forms the outermost layer and executes first.
+    /// </summary>
+    /// <typeparam name="TDecorator">
+    /// The decorator implementation, which must implement <see cref="IRequestDecorator.WithResponse"/>.
+    /// </typeparam>
+    /// <returns>The same <see cref="DecoratorBuilder{TRequest, TResponse}"/> so that calls can be chained.</returns>
+    public DecoratorBuilder<TRequest, TResponse> With<TDecorator>()
+        where TDecorator : IRequestDecorator.WithResponse
+    {
+        _options.Decorators.Push(typeof(TDecorator));
+        return this;
+    }
+}
+
+/// <summary>
 /// Configures how a request handler is registered, most notably the decorator pipeline
 /// applied around it.
 /// </summary>
-public sealed class RequestHandlerOptions
+/// <typeparam name="TRequest">The request type being handled.</typeparam>
+public sealed class RequestHandlerOptions<TRequest>
+    where TRequest : IRequest
 {
-    internal List<Type> Decorators { get; } = [];
+    internal Stack<Type> Decorators { get; } = new();
 
     /// <summary>
-    /// Adds decorators to wrap the handler. Each type must be an open generic definition
-    /// (for example <c>typeof(LoggingHandler&lt;,&gt;)</c>) implementing
-    /// <see cref="IRequestDecorator{TRequest, TResponse}"/>. Decorators are wrapped in the
-    /// order supplied, so the last decorator supplied forms the outermost layer and executes first.
+    /// Fluent entry point for attaching decorators, for example
+    /// <c>x.Decorator.With&lt;LoggingDecorator&gt;()</c>.
     /// </summary>
-    /// <param name="decoratorTypeDefinitions">The open generic decorator type definitions to apply.</param>
-    /// <returns>The same <see cref="RequestHandlerOptions"/> so that calls can be chained.</returns>
-    public RequestHandlerOptions UseDecorators(params Type[] decoratorTypeDefinitions)
+    public DecoratorBuilder<TRequest> Decorator => new(this);
+}
+
+/// <summary>
+/// Fluent builder for adding decorators to a <see cref="RequestHandlerOptions{TRequest}"/>.
+/// </summary>
+/// <typeparam name="TRequest">The request type being handled.</typeparam>
+public sealed class DecoratorBuilder<TRequest>
+    where TRequest : IRequest
+{
+    private readonly RequestHandlerOptions<TRequest> _options;
+
+    internal DecoratorBuilder(RequestHandlerOptions<TRequest> options) => _options = options;
+
+    /// <summary>
+    /// Adds a decorator to wrap the handler. Decorators execute in the order added (FIFO):
+    /// the first decorator added forms the outermost layer and executes first.
+    /// </summary>
+    /// <typeparam name="TDecorator">
+    /// The decorator implementation, which must implement <see cref="IRequestDecorator"/>.
+    /// </typeparam>
+    /// <returns>The same <see cref="DecoratorBuilder{TRequest}"/> so that calls can be chained.</returns>
+    public DecoratorBuilder<TRequest> With<TDecorator>()
+        where TDecorator : IRequestDecorator
     {
-        Decorators.AddRange(decoratorTypeDefinitions);
+        _options.Decorators.Push(typeof(TDecorator));
         return this;
     }
 }
