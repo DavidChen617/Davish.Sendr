@@ -3,4 +3,7 @@
     <Project Path="src/Sendr.Abstractions/Sendr.Abstractions.csproj" />
     <Project Path="src/Sendr/Sendr.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/UnitTests/UnitTests.csproj" />
+  </Folder>
 </Solution>
