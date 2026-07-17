@@ -18,7 +18,11 @@ public static class Dependency
         /// <returns>The same <see cref="IServiceCollection"/> so that calls can be chained.</returns>
         public IServiceCollection AddSendr()
         {
-            return services.AddScoped<ISender, Sender>();
+            services.AddSingleton<HandlerRegistry>();
+            services.AddScoped<Sender>();
+            services.AddScoped<ISender>(sp => sp.GetRequiredService<Sender>());
+            services.AddScoped<IStreamSender>(sp => sp.GetRequiredService<Sender>());
+            return services;
         }
 
         /// <summary>
@@ -38,8 +42,6 @@ public static class Dependency
             where TRequest : IRequest<TResponse>
             where THandler : class, IRequestHandler<TRequest, TResponse>
         {
-            HandlersCache.GetOrCreate(typeof(TRequest), typeof(TResponse));
-
             services.AddTransient<THandler>();
 
             var options = new RequestHandlerOptions<TRequest, TResponse>();
@@ -80,8 +82,6 @@ public static class Dependency
             where TRequest : IRequest
             where THandler : class, IRequestHandler<TRequest>
         {
-            HandlersCache.GetOrCreate(typeof(TRequest));
-
             services.AddTransient<THandler>();
 
             var options = new RequestHandlerOptions<TRequest>();
@@ -98,6 +98,47 @@ public static class Dependency
                 {
                     var decorator = (IRequestDecorator)pv.GetRequiredService(decoratorType);
                     handler = new DecoratorHandlerImpl<TRequest>(decorator, handler);
+                }
+
+                return handler;
+            });
+
+            return services;
+        }
+
+        /// <summary>
+        /// Registers a stream handler for the request, optionally wrapping it with a
+        /// decorator pipeline configured via <see cref="StreamRequestHandlerOptions{TRequest, TResponse}.Decorator"/>.
+        /// </summary>
+        /// <typeparam name="TRequest">The stream request type handled by <typeparamref name="THandler"/>.</typeparam>
+        /// <typeparam name="TResponse">The type of each item produced for the request.</typeparam>
+        /// <typeparam name="THandler">The concrete stream handler implementation to register.</typeparam>
+        /// <param name="configure">
+        /// An optional callback to configure the handler, such as attaching decorators via
+        /// <c>x.Decorator.With&lt;TDecorator&gt;()</c>.
+        /// </param>
+        /// <returns>The same <see cref="IServiceCollection"/> so that calls can be chained.</returns>
+        public IServiceCollection AddStreamRequestHandler<TRequest, TResponse, THandler>(
+            Action<StreamRequestHandlerOptions<TRequest, TResponse>>? configure = null)
+            where TRequest : IStreamRequest<TResponse>
+            where THandler : class, IStreamRequestHandler<TRequest, TResponse>
+        {
+            services.AddTransient<THandler>();
+
+            var options = new StreamRequestHandlerOptions<TRequest, TResponse>();
+            configure?.Invoke(options);
+
+            foreach (var decoratorType in options.Decorators)
+                services.TryAddTransient(decoratorType);
+
+            services.AddTransient<IStreamRequestHandler<TRequest, TResponse>>(pv =>
+            {
+                IStreamRequestHandler<TRequest, TResponse> handler = pv.GetRequiredService<THandler>();
+
+                foreach (var decoratorType in options.Decorators)
+                {
+                    var decorator = (IStreamRequestDecorator)pv.GetRequiredService(decoratorType);
+                    handler = new StreamDecoratorHandlerImpl<TRequest, TResponse>(decorator, handler);
                 }
 
                 return handler;
@@ -192,6 +233,52 @@ public sealed class DecoratorBuilder<TRequest>
     /// <returns>The same <see cref="DecoratorBuilder{TRequest}"/> so that calls can be chained.</returns>
     public DecoratorBuilder<TRequest> With<TDecorator>()
         where TDecorator : IRequestDecorator
+    {
+        _options.Decorators.Push(typeof(TDecorator));
+        return this;
+    }
+}
+
+/// <summary>
+/// Configures how a stream request handler is registered, most notably the decorator
+/// pipeline applied around it.
+/// </summary>
+/// <typeparam name="TRequest">The stream request type being handled.</typeparam>
+/// <typeparam name="TResponse">The type of each item produced for the request.</typeparam>
+public sealed class StreamRequestHandlerOptions<TRequest, TResponse>
+    where TRequest : IStreamRequest<TResponse>
+{
+    internal Stack<Type> Decorators { get; } = new();
+
+    /// <summary>
+    /// Fluent entry point for attaching decorators, for example
+    /// <c>x.Decorator.With&lt;LoggingStreamDecorator&gt;()</c>.
+    /// </summary>
+    public StreamDecoratorBuilder<TRequest, TResponse> Decorator => new(this);
+}
+
+/// <summary>
+/// Fluent builder for adding decorators to a <see cref="StreamRequestHandlerOptions{TRequest, TResponse}"/>.
+/// </summary>
+/// <typeparam name="TRequest">The stream request type being handled.</typeparam>
+/// <typeparam name="TResponse">The type of each item produced for the request.</typeparam>
+public sealed class StreamDecoratorBuilder<TRequest, TResponse>
+    where TRequest : IStreamRequest<TResponse>
+{
+    private readonly StreamRequestHandlerOptions<TRequest, TResponse> _options;
+
+    internal StreamDecoratorBuilder(StreamRequestHandlerOptions<TRequest, TResponse> options) => _options = options;
+
+    /// <summary>
+    /// Adds a decorator to wrap the handler. Decorators execute in the order added (FIFO):
+    /// the first decorator added forms the outermost layer and executes first.
+    /// </summary>
+    /// <typeparam name="TDecorator">
+    /// The decorator implementation, which must implement <see cref="IStreamRequestDecorator"/>.
+    /// </typeparam>
+    /// <returns>The same <see cref="StreamDecoratorBuilder{TRequest, TResponse}"/> so that calls can be chained.</returns>
+    public StreamDecoratorBuilder<TRequest, TResponse> With<TDecorator>()
+        where TDecorator : IStreamRequestDecorator
     {
         _options.Decorators.Push(typeof(TDecorator));
         return this;

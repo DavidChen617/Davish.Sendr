@@ -12,3 +12,10 @@ public interface IRequest;
 /// </summary>
 /// <typeparam name="TResponse">The type of the response returned by the handler.</typeparam>
 public interface IRequest<out TResponse> : IRequest;
+
+/// <summary>
+/// Marker interface for a request that produces an asynchronous stream of
+/// <typeparamref name="TResponse"/> items when dispatched through a stream sender.
+/// </summary>
+/// <typeparam name="TResponse">The type of each item returned by the handler.</typeparam>
+public interface IStreamRequest<out TResponse>;
