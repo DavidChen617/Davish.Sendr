@@ -4,6 +4,7 @@
     <Project Path="src/Sendr/Sendr.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Benchmark/Benchmark.csproj" />
     <Project Path="tests/UnitTests/UnitTests.csproj" />
   </Folder>
 </Solution>
