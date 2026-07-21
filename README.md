@@ -1,6 +1,27 @@
+<div align="center">
+
 # Davish.Sendr
 
-A free, lightweight mediator for .NET with request dispatching, async stream dispatching, and decorator pipelines.
+*A free, lightweight mediator for .NET — explicit, no assembly scanning.*
+
+[![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.svg)](https://www.nuget.org/packages/Davish.Sendr/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+</div>
+
+Sendr keeps the ergonomics you expect from a mediator — send a request, let a handler resolve it, wrap it in cross-cutting behaviour — while staying small, allocation-conscious, and fully explicit about what is registered. It covers request/response dispatching, async streams, and a decorator pipeline.
+
+## Features
+
+- **Request/response dispatching** — `IRequest` for commands, `IRequest<TResponse>` for queries.
+- **Async streams** — `IStreamRequest<TResponse>` dispatched lazily as `IAsyncEnumerable<T>`.
+- **Non-generic decorators** — a single decorator type wraps *any* compatible request; no per-request boilerplate.
+- **Explicit registration** — every handler is registered by hand. No reflection-based assembly scanning, no surprises at startup.
+- **Multi-target** — builds for `netstandard2.0` and `net10.0`.
+- **Split packages** — depend only on `Davish.Sendr.Abstractions` from your domain layer.
+
+> [!NOTE]
+> Unlike scanning-based mediators, Sendr never discovers handlers implicitly. Registration is a compile-time-checked call, so a missing handler is obvious at the composition root.
 
 ## Install
 
@@ -8,7 +29,13 @@ A free, lightweight mediator for .NET with request dispatching, async stream dis
 dotnet add package Davish.Sendr
 ```
 
-## Register Sendr
+The contracts (`IRequest`, `IRequestHandler`, `IRequestDecorator`, `ISender`, …) also ship on their own so your domain assemblies can reference them without pulling in the DI implementation:
+
+```bash
+dotnet add package Davish.Sendr.Abstractions
+```
+
+## Getting started
 
 Call `AddSendr` once, then register each handler explicitly.
 
@@ -64,7 +91,7 @@ var order = await sender.SendAsync(new GetOrder(Guid.NewGuid()));
 
 ## Decorators
 
-Decorators are non-generic pipeline behaviors. A single decorator type can wrap any compatible request type.
+Decorators are non-generic pipeline behaviours. A single decorator type can wrap any compatible request type — implement `IRequestDecorator` for commands and `IRequestDecorator.WithResponse` for queries.
 
 ```csharp
 builder.Services
@@ -74,7 +101,7 @@ builder.Services
         .With<LoggingDecorator>());
 ```
 
-Decorators execute in the order they are added. In the example above, `TransactionDecorator` is the outermost decorator.
+Decorators execute in the order they are added: the first `With<>` is the outermost layer. In the example above, `TransactionDecorator` runs first and last, with `LoggingDecorator` nested inside it.
 
 ```csharp
 public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
@@ -107,7 +134,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 
 ## Streams
 
-Use `IStreamRequest<TResponse>` and `IStreamRequestHandler<TRequest, TResponse>` for async streams.
+Use `IStreamRequest<TResponse>` and `IStreamRequestHandler<TRequest, TResponse>` for async streams. The sequence is lazy — handling begins when enumeration starts.
 
 ```csharp
 public sealed record ListOrders : IStreamRequest<OrderDto>;
@@ -136,7 +163,7 @@ await foreach (var order in streamSender.SendStream(new ListOrders()))
 }
 ```
 
-Stream handlers can also use decorators.
+Stream handlers support decorators too, via `IStreamRequestDecorator`.
 
 ```csharp
 builder.Services
@@ -161,6 +188,20 @@ public sealed class LoggingStreamDecorator(ILogger<LoggingStreamDecorator> logge
 }
 ```
 
-## License
+> [!TIP]
+> A stream decorator that uses `yield` should wrap the enumeration in `try/finally` and forward the token via `[EnumeratorCancellation]` so cancellation and disposal propagate correctly.
 
-MIT © David Chen
+## Benchmarks
+
+The repository includes a [BenchmarkDotNet](https://benchmarkdotnet.org/) suite that compares dispatching through `ISender` against a direct handler call, and measures the overhead added by decorators and stream enumeration.
+
+```bash
+dotnet run -c Release --project tests/Benchmark
+```
+
+## Building from source
+
+```bash
+dotnet build
+dotnet test
+```
