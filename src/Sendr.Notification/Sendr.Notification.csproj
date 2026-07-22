@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Davish.Sendr.Notification</PackageId>
+    <AssemblyName>Davish.Sendr.Notification</AssemblyName>
+    <Description>Notification publishing for Davish.Sendr — fan-out to Sequence and Parallel handler groups with a decorator pipeline.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sendr.Notification.Abstractions\Sendr.Notification.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="[10.0.0, )" />
+  </ItemGroup>
+
+</Project>

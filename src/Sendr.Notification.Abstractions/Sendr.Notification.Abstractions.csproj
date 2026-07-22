@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Davish.Sendr.Notification.Abstractions</PackageId>
+    <AssemblyName>Davish.Sendr.Notification.Abstractions</AssemblyName>
+    <Description>Abstractions (contracts) for Davish.Sendr.Notification — INotification, INotificationHandler, INotificationDecorator, IPublisher.</Description>
+  </PropertyGroup>
+
+</Project>
