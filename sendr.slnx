@@ -1,10 +1,13 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Sendr.Abstractions/Sendr.Abstractions.csproj" />
+    <Project Path="src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj" />
+    <Project Path="src/Sendr.Notification/Sendr.Notification.csproj" />
     <Project Path="src/Sendr/Sendr.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Benchmark/Benchmark.csproj" />
+    <Project Path="tests/Notification.Tests/Notification.Tests.csproj" />
     <Project Path="tests/UnitTests/UnitTests.csproj" />
   </Folder>
 </Solution>
