@@ -6,6 +6,7 @@ on:
       - 'v*'
       - 'sendr-v*'
       - 'notification-v*'
+      - 'message-v*'
 
 jobs:
   build:
@@ -53,6 +54,14 @@ jobs:
                 echo "EOF"
               } >> "$GITHUB_ENV"
               ;;
+            message-v*)
+              echo "PKG_VERSION=${TAG#message-v}" >> "$GITHUB_ENV"
+              {
+                echo "PROJECTS<<EOF"
+                echo "src/Sendr.Message/Sendr.Message.csproj"
+                echo "EOF"
+              } >> "$GITHUB_ENV"
+              ;;
             v*)
               echo "PKG_VERSION=${TAG#v}" >> "$GITHUB_ENV"
               {
@@ -65,7 +74,7 @@ jobs:
               } >> "$GITHUB_ENV"
               ;;
             *)
-              echo "Unrecognized tag '$TAG' — expected 'v*', 'sendr-v*', or 'notification-v*'" >&2
+              echo "Unrecognized tag '$TAG' — expected 'v*', 'sendr-v*', 'notification-v*', or 'message-v*'" >&2
               exit 1
               ;;
           esac
