@@ -6,6 +6,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.svg)](https://www.nuget.org/packages/Davish.Sendr/)
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.Notification.svg?label=nuget%20%28notification%29)](https://www.nuget.org/packages/Davish.Sendr.Notification/)
+[![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.Message.svg?label=nuget%20%28message%29)](https://www.nuget.org/packages/Davish.Sendr.Message/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -15,12 +16,13 @@ Sendr keeps the ergonomics you expect from a mediator — send a request, let a 
 ## Features
 
 - **Request/response dispatching** — `IRequest` for commands, `IRequest<TResponse>` for queries, each resolved to exactly one handler.
+- **CQRS contracts** — `ICommand` / `ICommand<TResponse>` and `IQuery<TResponse>` name the command/query split explicitly, while still dispatching through the same `ISender`.
 - **Async streams** — `IStreamRequest<TResponse>` dispatched lazily as `IAsyncEnumerable<T>`.
 - **Notification fan-out** — `INotification` published to any number of handlers, arranged into an ordered **Sequence** group and a concurrent **Parallel** group.
 - **Non-generic decorators** — a single decorator type wraps *any* compatible request, stream, or notification handler; no per-type boilerplate.
 - **Explicit registration** — every handler is registered by hand. No reflection-based assembly scanning, no surprises at startup.
 - **Multi-target** — builds for `netstandard2.0` and `net10.0`.
-- **Split packages** — depend only on the abstractions package from your domain layer; request/response and notification each ship as their own pair of packages.
+- **Split packages** — depend only on the abstractions package from your domain layer; request/response and notification each ship as their own pair of packages, with an optional CQRS-flavored package on top.
 
 > [!NOTE]
 > Unlike scanning-based mediators, Sendr never discovers handlers implicitly. Registration is a compile-time-checked call, so a missing handler is obvious at the composition root.
@@ -42,6 +44,12 @@ Notification publishing is a separate pair of packages — it doesn't depend on 
 ```bash
 dotnet add package Davish.Sendr.Notification
 dotnet add package Davish.Sendr.Notification.Abstractions
+```
+
+If you want the CQRS naming (`ICommand`, `IQuery`, …) instead of the plain `IRequest` contracts, add its own package too:
+
+```bash
+dotnet add package Davish.Sendr.Message
 ```
 
 ## Getting started
@@ -96,6 +104,43 @@ var sender = serviceProvider.GetRequiredService<ISender>();
 await sender.SendAsync(new CreateOrder(Guid.NewGuid()));
 
 var order = await sender.SendAsync(new GetOrder(Guid.NewGuid()));
+```
+
+## Commands and queries (CQRS)
+
+`Davish.Sendr.Message` adds `ICommand` / `ICommand<TResponse>` and `IQuery<TResponse>` on top of `IRequest` / `IRequest<TResponse>` — same dispatch, same decorators, just names that say which side of CQRS a request belongs to.
+
+```csharp
+public sealed record CreateOrder(Guid Id) : ICommand;
+
+public sealed class CreateOrderHandler : ICommandHandler<CreateOrder>
+{
+    public Task HandleAsync(CreateOrder request, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+public sealed record GetOrder(Guid Id) : IQuery<OrderDto>;
+
+public sealed record OrderDto(Guid Id, string Number);
+
+public sealed class GetOrderHandler : IQueryHandler<GetOrder, OrderDto>
+{
+    public Task<OrderDto> HandleAsync(GetOrder request, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new OrderDto(request.Id, "SO-001"));
+    }
+}
+```
+
+Registration and dispatch are unchanged — `ICommand`/`IQuery` are `IRequest`/`IRequest<TResponse>` under the hood, so they go through the same `AddRequestHandler` and `ISender.SendAsync` you already use.
+
+```csharp
+builder.Services
+    .AddSendr()
+    .AddRequestHandler<CreateOrder, CreateOrderHandler>()
+    .AddRequestHandler<GetOrder, OrderDto, GetOrderHandler>();
 ```
 
 ## Decorators
