@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Davish.Sendr.Message</PackageId>
+    <AssemblyName>Davish.Sendr.Message</AssemblyName>
+    <Description>CQRS message contracts for Davish.Sendr — ICommand, ICommandHandler, IQuery, IQueryHandler.</Description>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Davish.Sendr.Abstractions" Version="[2.0.0, )" />
+  </ItemGroup>
+
+</Project>
