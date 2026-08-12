@@ -18,7 +18,7 @@ public class MessageTests
         var sender = provider.GetService<ISender>()!;
 
         // When
-        await sender.SendAsync(new SomeCommand());
+        await sender.SendAsync(new SomeCommand(), default);
 
         // Then
         Assert.Equal(["Handled"], collector.LogCollection);
@@ -35,7 +35,7 @@ public class MessageTests
             .GetService<ISender>()!;
 
         // When
-        var result = await sender.SendAsync(new SomeCommandWithResponse());
+        var result = await sender.SendAsync(new SomeCommandWithResponse(), default);
 
         // Then
         Assert.Equal(new SomeId(1), result);
@@ -52,7 +52,7 @@ public class MessageTests
             .GetService<ISender>()!;
 
         // When
-        var result = await sender.SendAsync(new SomeQuery());
+        var result = await sender.SendAsync(new SomeQuery(), default);
 
         // Then
         Assert.IsType<SomeDto>(result);
@@ -72,7 +72,7 @@ public class MessageTests
         var sender = provider.GetService<ISender>()!;
 
         // When
-        await sender.SendAsync(new SomeCommand());
+        await sender.SendAsync(new SomeCommand(), default);
 
         // Then
         Assert.Equal(["Start", "Handled", "End"], collector.LogCollection);
@@ -89,7 +89,7 @@ public class MessageTests
             .GetService<ISender>()!;
 
         // When
-        var act = () => sender.SendAsync(new ThrowingCommand());
+        var act = () => sender.SendAsync(new ThrowingCommand(), default);
 
         // Then
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -106,7 +106,7 @@ public class MessageTests
             .GetService<ISender>()!;
 
         // When
-        var act = () => sender.SendAsync(new ThrowingQuery());
+        var act = () => sender.SendAsync(new ThrowingQuery(), default);
 
         // Then
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -117,7 +117,7 @@ public sealed record SomeCommand : ICommand;
 
 public sealed class SomeCommandHandler(LogCollector collector) : ICommandHandler<SomeCommand>
 {
-    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken)
     {
         collector.LogCollection.Add("Handled");
         return Task.CompletedTask;
@@ -130,7 +130,7 @@ public sealed record SomeCommandWithResponse : ICommand<SomeId>;
 
 public sealed class SomeCommandWithResponseHandler : ICommandHandler<SomeCommandWithResponse, SomeId>
 {
-    public Task<SomeId> HandleAsync(SomeCommandWithResponse request, CancellationToken cancellationToken = default)
+    public Task<SomeId> HandleAsync(SomeCommandWithResponse request, CancellationToken cancellationToken)
     {
         return Task.FromResult(new SomeId(1));
     }
@@ -142,7 +142,7 @@ public sealed record SomeDto;
 
 public sealed class SomeQueryHandler : IQueryHandler<SomeQuery, SomeDto>
 {
-    public Task<SomeDto> HandleAsync(SomeQuery request, CancellationToken cancellationToken = default)
+    public Task<SomeDto> HandleAsync(SomeQuery request, CancellationToken cancellationToken)
     {
         return Task.FromResult(new SomeDto());
     }
@@ -152,7 +152,7 @@ public sealed record ThrowingCommand : ICommand;
 
 public sealed class ThrowingCommandHandler : ICommandHandler<ThrowingCommand>
 {
-    public Task HandleAsync(ThrowingCommand request, CancellationToken cancellationToken = default)
+    public Task HandleAsync(ThrowingCommand request, CancellationToken cancellationToken)
         => throw new InvalidOperationException("boom");
 }
 
@@ -160,7 +160,7 @@ public sealed record ThrowingQuery : IQuery<SomeDto>;
 
 public sealed class ThrowingQueryHandler : IQueryHandler<ThrowingQuery, SomeDto>
 {
-    public Task<SomeDto> HandleAsync(ThrowingQuery request, CancellationToken cancellationToken = default)
+    public Task<SomeDto> HandleAsync(ThrowingQuery request, CancellationToken cancellationToken)
         => throw new InvalidOperationException("boom");
 }
 
@@ -172,7 +172,7 @@ public sealed class LogCollector
 public sealed class LoggingDecorator(LogCollector collector) : IRequestDecorator
 {
     public async Task HandleAsync<TRequest>(
-        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken = default)
+        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
         where TRequest : IRequest
     {
         collector.LogCollection.Add("Start");

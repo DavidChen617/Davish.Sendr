@@ -46,7 +46,7 @@ public class SendrTests
             .GetService<ISender>()!;
 
         // When
-        var result = await sender.SendAsync(new SomeQuery());
+        var result = await sender.SendAsync(new SomeQuery(), default);
 
         // Then
         Assert.IsType<SomeDto>(result);
@@ -65,7 +65,7 @@ public class SendrTests
         var sender = provider.GetService<ISender>()!;
 
         // When
-        await sender.SendAsync(new SomeCommand());
+        await sender.SendAsync(new SomeCommand(), default);
 
         // Then
         Assert.Equal(["TaskVoidHandled"], collector.LogCollection);
@@ -85,7 +85,7 @@ public class SendrTests
         var sender = provider.GetService<ISender>()!;
 
         // When
-        await sender.SendAsync(new SomeQuery());
+        await sender.SendAsync(new SomeQuery(), default);
 
         //Then
         Assert.Equal(["Start", "End"], collector.LogCollection);
@@ -107,7 +107,7 @@ public class SendrTests
 
         // When
         var sender = provider.GetService<ISender>()!;
-        await sender.SendAsync(new SomeQuery());
+        await sender.SendAsync(new SomeQuery(), default);
 
         //Then
         Assert.Equal(["BeginTransaction", "Start", "End", "Commit"], collector.LogCollection);
@@ -127,7 +127,7 @@ public class SendrTests
         var sender = provider.GetService<ISender>()!;
 
         // When
-        await sender.SendAsync(new SomeCommand());
+        await sender.SendAsync(new SomeCommand(), default);
 
         //Then
         Assert.Equal(["Start", "TaskVoidHandled", "End"], collector.LogCollection);
@@ -148,8 +148,8 @@ public class SendrTests
         var sender = provider.GetService<ISender>()!;
 
         // When
-        await sender.SendAsync(new SomeQuery());
-        await sender.SendAsync(new SomeQuery());
+        await sender.SendAsync(new SomeQuery(), default);
+        await sender.SendAsync(new SomeQuery(), default);
 
         // Then
         Assert.Equal(
@@ -177,7 +177,7 @@ public class SendrTests
 
         // When
         var sender = provider.GetService<ISender>()!;
-        await sender.SendAsync(new SomeCommand());
+        await sender.SendAsync(new SomeCommand(), default);
 
         //Then
         Assert.Equal(
@@ -190,7 +190,7 @@ public sealed record SomeCommand : IRequest;
 
 public sealed class SomeCommandHandler(LogCollector collector) : IRequestHandler<SomeCommand>
 {
-    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken)
     {
         collector.LogCollection.Add("TaskVoidHandled");
         return Task.CompletedTask;
@@ -203,7 +203,7 @@ public record SomeDto;
 
 public sealed class SomeQueryHandler : IRequestHandler<SomeQuery, SomeDto>
 {
-    public Task<SomeDto> HandleAsync(SomeQuery request, CancellationToken cancellationToken = default)
+    public Task<SomeDto> HandleAsync(SomeQuery request, CancellationToken cancellationToken)
     {
         return Task.FromResult(new SomeDto());
     }
@@ -218,7 +218,7 @@ public sealed class LoggingDecorator(LogCollector collector)
     : IRequestDecorator, IRequestDecorator.WithResponse
 {
     public async Task<TResponse> HandleAsync<TRequest, TResponse>(
-        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken = default)
+        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
         where TRequest : IRequest<TResponse>
     {
         collector.LogCollection.Add("Start");
@@ -228,7 +228,7 @@ public sealed class LoggingDecorator(LogCollector collector)
     }
 
     public async Task HandleAsync<TRequest>(
-        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken = default)
+        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
         where TRequest : IRequest
     {
         collector.LogCollection.Add("Start");
@@ -241,7 +241,7 @@ public sealed class TransactionDecorator(LogCollector collector)
     : IRequestDecorator, IRequestDecorator.WithResponse
 {
     public async Task<TResponse> HandleAsync<TRequest, TResponse>(
-        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken = default)
+        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
         where TRequest : IRequest<TResponse>
     {
         collector.LogCollection.Add("BeginTransaction");
@@ -251,7 +251,7 @@ public sealed class TransactionDecorator(LogCollector collector)
     }
 
     public async Task HandleAsync<TRequest>(
-        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken = default)
+        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
         where TRequest : IRequest
     {
         collector.LogCollection.Add("BeginTransaction");

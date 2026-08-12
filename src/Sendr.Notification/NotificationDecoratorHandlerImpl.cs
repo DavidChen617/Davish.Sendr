@@ -11,7 +11,7 @@ internal sealed class NotificationDecoratorHandlerImpl<TNotification>(
     : INotificationHandler<TNotification>
     where TNotification : INotification
 {
-    public Task HandleAsync(TNotification notification, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TNotification notification, CancellationToken cancellationToken)
         => decorator.HandleAsync(
                notification,
                () => inner.HandleAsync(notification, cancellationToken),

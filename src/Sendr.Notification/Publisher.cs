@@ -17,12 +17,12 @@ public interface IPublisher
     /// <param name="notification">The notification to publish.</param>
     /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
     /// <returns>A task that completes when every handler has run.</returns>
-    Task PublishAsync(INotification notification, CancellationToken cancellationToken = default);
+    Task PublishAsync(INotification notification, CancellationToken cancellationToken);
 }
 
 internal sealed class Publisher(IServiceProvider sp, NotificationHandlersRegistry registry) : IPublisher
 {
-    public Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)
+    public Task PublishAsync(INotification notification, CancellationToken cancellationToken)
     {
         var handlers = (NotificationHandlersBase?)sp.GetService(registry.GetClosedType(notification.GetType()));
         return handlers is null
@@ -53,7 +53,7 @@ internal sealed class NotificationHandlersRegistry
 internal abstract class NotificationHandlersBase
 {
     public abstract Task PublishAsync(
-        INotification notification, IServiceProvider sp, CancellationToken cancellationToken = default);
+        INotification notification, IServiceProvider sp, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -74,7 +74,7 @@ internal sealed class NotificationHandlers<TNotification>(
     where TNotification : INotification
 {
     public override Task PublishAsync(
-        INotification notification, IServiceProvider sp, CancellationToken cancellationToken = default)
+        INotification notification, IServiceProvider sp, CancellationToken cancellationToken)
     {
         var typed = (TNotification)notification;
 

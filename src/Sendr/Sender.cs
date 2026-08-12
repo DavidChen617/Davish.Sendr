@@ -15,7 +15,7 @@ public interface ISender
     /// <param name="request">The request to dispatch.</param>
     /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
     /// <returns>A task that completes when the request has been handled.</returns>
-    Task SendAsync(IRequest request, CancellationToken cancellationToken = default);
+    Task SendAsync(IRequest request, CancellationToken cancellationToken);
 
     /// <summary>
     /// Dispatches a request to its handler and returns the produced response.
@@ -26,7 +26,7 @@ public interface ISender
     /// <returns>A task that resolves to the response produced for the request.</returns>
     Task<TResponse> SendAsync<TResponse>(
         IRequest<TResponse> request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -44,24 +44,24 @@ public interface IStreamSender
     /// <param name="cancellationToken">A token to observe while enumerating the sequence.</param>
     /// <returns>An asynchronous sequence of responses produced for the request.</returns>
     IAsyncEnumerable<TResponse> SendStream<TResponse>(
-        IStreamRequest<TResponse> request, CancellationToken cancellationToken = default);
+        IStreamRequest<TResponse> request, CancellationToken cancellationToken);
 }
 
 internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : ISender, IStreamSender
 {
-    public Task SendAsync(IRequest request, CancellationToken cancellationToken = default)
+    public Task SendAsync(IRequest request, CancellationToken cancellationToken)
         => ((RequestHandler)
                 registry.GetOrCreate(request.GetType()))
             .HandleAsync(request, sp, cancellationToken);
 
     public Task<TResponse> SendAsync<TResponse>(IRequest<TResponse> request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         => ((RequestHandler<TResponse>)
                 registry.GetOrCreate(request.GetType(), typeof(TResponse)))
             .HandleAsync(request, sp, cancellationToken);
 
     public IAsyncEnumerable<TResponse> SendStream<TResponse>(
-        IStreamRequest<TResponse> request, CancellationToken cancellationToken = default)
+        IStreamRequest<TResponse> request, CancellationToken cancellationToken)
         => ((StreamRequestHandler<TResponse>)
                 registry.GetOrCreateStream(request.GetType(), typeof(TResponse)))
             .HandleAsync(request, sp, cancellationToken);

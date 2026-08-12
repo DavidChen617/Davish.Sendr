@@ -13,7 +13,7 @@ public interface IRequestHandler<in TRequest>
     /// <param name="request">The request to handle.</param>
     /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
     /// <returns>A task that completes when the request has been handled.</returns>
-    Task HandleAsync(TRequest request, CancellationToken cancellationToken = default);
+    Task HandleAsync(TRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -30,7 +30,7 @@ public interface IRequestHandler<in TRequest, TResponse>
     /// <param name="request">The request to handle.</param>
     /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
     /// <returns>A task that resolves to the response produced for the request.</returns>
-    Task<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken = default);
+    Task<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -67,7 +67,7 @@ public interface IRequestDecorator
     Task HandleAsync<TRequest>(
         TRequest request,
         RequestHandlerDelegate next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TRequest : IRequest;
 
     /// <summary>
@@ -91,7 +91,7 @@ public interface IRequestDecorator
         Task<TResponse> HandleAsync<TRequest, TResponse>(
             TRequest request,
             RequestHandlerDelegate<TResponse> next,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken)
             where TRequest : IRequest<TResponse>;
     }
 }
@@ -123,7 +123,7 @@ public interface IStreamRequestDecorator
     /// <returns>The asynchronous sequence produced for the request.</returns>
     IAsyncEnumerable<TResponse> HandleAsync<TRequest, TResponse>(
         TRequest request, StreamHandlerDelegate<TResponse> next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TRequest : IStreamRequest<TResponse>;
 }
 
@@ -142,5 +142,5 @@ public interface IStreamRequestHandler<in TRequest, out TResponse>
     /// <param name="request">The request to handle.</param>
     /// <param name="cancellationToken">A token to observe while enumerating the sequence.</param>
     /// <returns>An asynchronous sequence of responses produced for the request.</returns>
-    IAsyncEnumerable<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken);
 }
