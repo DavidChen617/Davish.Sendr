@@ -7,7 +7,7 @@ internal abstract class RequestHandlerBase;
 internal abstract class RequestHandler : RequestHandlerBase
 {
     public abstract Task HandleAsync(IRequest request, IServiceProvider sp,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken);
 }
 
 internal abstract class RequestHandler<TResponse> : RequestHandlerBase
@@ -15,7 +15,7 @@ internal abstract class RequestHandler<TResponse> : RequestHandlerBase
     public abstract Task<TResponse> HandleAsync(
         IRequest<TResponse> request,
         IServiceProvider sp,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken);
 }
 
 internal sealed class RequestHandlerImpl<TRequest> : RequestHandler
@@ -24,7 +24,7 @@ internal sealed class RequestHandlerImpl<TRequest> : RequestHandler
     public override Task HandleAsync(
         IRequest request,
         IServiceProvider sp,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         => sp
             .GetRequiredService<IRequestHandler<TRequest>>()
             .HandleAsync((TRequest)request, cancellationToken);
@@ -36,7 +36,7 @@ internal sealed class RequestHandlerImpl<TRequest, TResponse> : RequestHandler<T
     public override Task<TResponse> HandleAsync(
         IRequest<TResponse> request,
         IServiceProvider sp,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         => sp
             .GetRequiredService<IRequestHandler<TRequest, TResponse>>()
             .HandleAsync((TRequest)request, cancellationToken);
@@ -45,7 +45,7 @@ internal sealed class RequestHandlerImpl<TRequest, TResponse> : RequestHandler<T
 internal abstract class StreamRequestHandler<TResponse> : RequestHandlerBase
 {
     public abstract IAsyncEnumerable<TResponse> HandleAsync(IStreamRequest<TResponse> request, IServiceProvider sp,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken);
 }
 
 internal sealed class StreamRequestHandlerImpl<TRequest, TResponse> : StreamRequestHandler<TResponse>
@@ -54,7 +54,7 @@ internal sealed class StreamRequestHandlerImpl<TRequest, TResponse> : StreamRequ
     public override IAsyncEnumerable<TResponse> HandleAsync(
         IStreamRequest<TResponse> request,
         IServiceProvider sp,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         => sp.GetRequiredService<IStreamRequestHandler<TRequest, TResponse>>()
             .HandleAsync((TRequest)request, cancellationToken);
 }

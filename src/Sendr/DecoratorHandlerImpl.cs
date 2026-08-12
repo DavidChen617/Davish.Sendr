@@ -11,7 +11,7 @@ internal sealed class DecoratorHandlerImpl<TRequest, TResponse>(
     : IRequestHandler<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
-    public Task<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken = default)
+    public Task<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken)
         => decorator.HandleAsync(
                request,
                () => inner.HandleAsync(request, cancellationToken),
@@ -29,7 +29,7 @@ internal sealed class DecoratorHandlerImpl<TRequest>(
     : IRequestHandler<TRequest>
     where TRequest : IRequest
 {
-    public Task HandleAsync(TRequest request, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TRequest request, CancellationToken cancellationToken)
         => decorator.HandleAsync(
                request,
                () => inner.HandleAsync(request, cancellationToken),
@@ -47,7 +47,7 @@ internal sealed class StreamDecoratorHandlerImpl<TRequest, TResponse>(
     : IStreamRequestHandler<TRequest, TResponse>
     where TRequest : IStreamRequest<TResponse>
 {
-    public IAsyncEnumerable<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken)
         => decorator.HandleAsync(
                request,
                () => inner.HandleAsync(request, cancellationToken),

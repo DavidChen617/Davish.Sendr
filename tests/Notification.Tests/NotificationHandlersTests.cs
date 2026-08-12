@@ -21,7 +21,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        await publisher.PublishAsync(new SomeNotification());
+        await publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         Assert.Equal(["First", "Second"], collector.LogCollection);
@@ -43,7 +43,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        await publisher.PublishAsync(new SomeNotification());
+        await publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         Assert.Equal(["Start", "First", "End", "Second"], collector.LogCollection);
@@ -59,7 +59,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When / Then
-        await publisher.PublishAsync(new SomeNotification());
+        await publisher.PublishAsync(new SomeNotification(), default);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        var act = () => publisher.PublishAsync(new SomeNotification());
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -102,7 +102,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        var act = () => publisher.PublishAsync(new SomeNotification());
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -125,7 +125,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        await publisher.PublishAsync(new SomeNotification());
+        await publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         Assert.Equal(["First", "Second"], collector.LogCollection.OrderBy(x => x));
@@ -147,7 +147,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        var act = () => publisher.PublishAsync(new SomeNotification());
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -173,7 +173,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        var act = () => publisher.PublishAsync(new SomeNotification());
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -197,7 +197,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        await publisher.PublishAsync(new SomeNotification());
+        await publisher.PublishAsync(new SomeNotification(), default);
 
         // Then
         Assert.Equal(["First", "Second"], collector.LogCollection.OrderBy(x => x));
@@ -222,7 +222,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        var act = () => publisher.PublishAsync(new SomeNotification());
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
         // Then: Sequence and Parallel start together — Sequence failing doesn't cancel Parallel.
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -248,7 +248,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        var act = () => publisher.PublishAsync(new SomeNotification());
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
         // Then: Parallel failing doesn't cancel Sequence — it still runs to completion, in order.
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -277,7 +277,7 @@ public class NotificationHandlersTests
         var publisher = provider.GetService<IPublisher>()!;
 
         // When
-        var act = () => publisher.PublishAsync(new SomeNotification());
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
         // Then: Sequence fail-fast stops before "Third"; Parallel's surviving handler still runs.
         await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -313,7 +313,7 @@ public sealed record SomeNotification : INotification;
 
 public sealed class FirstNotificationHandler(LogCollector collector) : INotificationHandler<SomeNotification>
 {
-    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken)
     {
         collector.LogCollection.Add("First");
         return Task.CompletedTask;
@@ -322,7 +322,7 @@ public sealed class FirstNotificationHandler(LogCollector collector) : INotifica
 
 public sealed class SecondNotificationHandler(LogCollector collector) : INotificationHandler<SomeNotification>
 {
-    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken)
     {
         collector.LogCollection.Add("Second");
         return Task.CompletedTask;
@@ -331,7 +331,7 @@ public sealed class SecondNotificationHandler(LogCollector collector) : INotific
 
 public sealed class ThirdNotificationHandler(LogCollector collector) : INotificationHandler<SomeNotification>
 {
-    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken)
     {
         collector.LogCollection.Add("Third");
         return Task.CompletedTask;
@@ -340,13 +340,13 @@ public sealed class ThirdNotificationHandler(LogCollector collector) : INotifica
 
 public sealed class ThrowingNotificationHandler : INotificationHandler<SomeNotification>
 {
-    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken)
         => throw new InvalidOperationException("boom");
 }
 
 public sealed class ThrowingAsyncNotificationHandler : INotificationHandler<SomeNotification>
 {
-    public async Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken)
     {
         await Task.Yield();
         throw new InvalidOperationException("boom-async");
@@ -358,7 +358,7 @@ public sealed class LoggingNotificationDecorator(LogCollector collector) : INoti
     public async Task HandleAsync<TNotification>(
         TNotification notification,
         NotificationHandlerDelegate next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TNotification : INotification
     {
         collector.LogCollection.Add("Start");

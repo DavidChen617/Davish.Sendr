@@ -29,16 +29,16 @@ public class DispatchBenchmark
     }
 
     [Benchmark(Baseline = true)]
-    public Task DirectCall_Query() => _directQueryHandler.HandleAsync(_directQuery);
+    public Task DirectCall_Query() => _directQueryHandler.HandleAsync(_directQuery, default);
 
     [Benchmark]
-    public Task SenderCall_Query() => _sender.SendAsync(_senderQuery);
+    public Task SenderCall_Query() => _sender.SendAsync(_senderQuery, default);
 
     [Benchmark]
-    public Task DirectCall_Command() => _directCommandHandler.HandleAsync(_directCommand);
+    public Task DirectCall_Command() => _directCommandHandler.HandleAsync(_directCommand, default);
 
     [Benchmark]
-    public Task SenderCall_Command() => _sender.SendAsync(_senderCommand);
+    public Task SenderCall_Command() => _sender.SendAsync(_senderCommand, default);
 }
 
 [MemoryDiagnoser]
@@ -74,16 +74,16 @@ public class DecoratorBenchmark
     }
 
     [Benchmark]
-    public Task SenderCall_Query_OneDecorator() => _senderOneDecorator.SendAsync(_query);
+    public Task SenderCall_Query_OneDecorator() => _senderOneDecorator.SendAsync(_query, default);
 
     [Benchmark]
-    public Task SenderCall_Query_TwoDecorators() => _senderTwoDecorators.SendAsync(_query);
+    public Task SenderCall_Query_TwoDecorators() => _senderTwoDecorators.SendAsync(_query, default);
 
     [Benchmark]
-    public Task SenderCall_Command_OneDecorator() => _senderOneDecorator.SendAsync(_command);
+    public Task SenderCall_Command_OneDecorator() => _senderOneDecorator.SendAsync(_command, default);
 
     [Benchmark]
-    public Task SenderCall_Command_TwoDecorators() => _senderTwoDecorators.SendAsync(_command);
+    public Task SenderCall_Command_TwoDecorators() => _senderTwoDecorators.SendAsync(_command, default);
 }
 
 [MemoryDiagnoser]
@@ -115,7 +115,7 @@ public class StreamBenchmark
     [Benchmark(Baseline = true)]
     public async Task DirectCall_Stream_Enumerate()
     {
-        await foreach (var _ in _directHandler.HandleAsync(_directQuery))
+        await foreach (var _ in _directHandler.HandleAsync(_directQuery, default))
         {
         }
     }
@@ -123,13 +123,13 @@ public class StreamBenchmark
     [Benchmark]
     public IAsyncEnumerable<SenderCall_StreamDto> SenderCall_Stream_Create()
     {
-        return _streamSender.SendStream(_senderQuery);
+        return _streamSender.SendStream(_senderQuery, default);
     }
 
     [Benchmark]
     public async Task SenderCall_Stream_Enumerate()
     {
-        await foreach (var _ in _streamSender.SendStream(_senderQuery))
+        await foreach (var _ in _streamSender.SendStream(_senderQuery, default))
         {
         }
     }
@@ -137,7 +137,7 @@ public class StreamBenchmark
     [Benchmark]
     public async Task SenderCall_Stream_OneDecorator_Enumerate()
     {
-        await foreach (var _ in _decoratedStreamSender.SendStream(_senderQuery))
+        await foreach (var _ in _decoratedStreamSender.SendStream(_senderQuery, default))
         {
         }
     }
@@ -151,7 +151,7 @@ public sealed class DirectCall_QueryHandler
 {
     public Task<DirectCall_QueryDto> HandleAsync(
         DirectCall_Query query,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken) =>
         Task.FromResult(new DirectCall_QueryDto());
 }
 
@@ -161,7 +161,7 @@ public sealed class DirectCall_CommandHandler
 {
     public Task HandleAsync(
         DirectCall_Command command,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken) =>
         Task.CompletedTask;
 }
 
@@ -173,7 +173,7 @@ public sealed class DirectCall_StreamHandler
 {
     public async IAsyncEnumerable<DirectCall_StreamDto> HandleAsync(
         DirectCall_StreamQuery query,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         yield return new DirectCall_StreamDto();
         await Task.CompletedTask;
@@ -188,7 +188,7 @@ public sealed class SenderCall_QueryHandler : IRequestHandler<SenderCall_Query, 
 {
     public Task<SenderCall_QueryDto> HandleAsync(
         SenderCall_Query request,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken) =>
         Task.FromResult(new SenderCall_QueryDto());
 }
 
@@ -198,7 +198,7 @@ public sealed class SenderCall_CommandHandler : IRequestHandler<SenderCall_Comma
 {
     public Task HandleAsync(
         SenderCall_Command request,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken) =>
         Task.CompletedTask;
 }
 
@@ -210,7 +210,7 @@ public sealed class SenderCall_StreamHandler : IStreamRequestHandler<SenderCall_
 {
     public async IAsyncEnumerable<SenderCall_StreamDto> HandleAsync(
         SenderCall_StreamQuery request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         yield return new SenderCall_StreamDto();
         await Task.CompletedTask;
@@ -222,14 +222,14 @@ public sealed class SenderCall_LoggingDecorator : IRequestDecorator, IRequestDec
     public Task HandleAsync<TRequest>(
         TRequest request,
         RequestHandlerDelegate next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TRequest : IRequest =>
         next();
 
     public Task<TResponse> HandleAsync<TRequest, TResponse>(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TRequest : IRequest<TResponse> =>
         next();
 }
@@ -239,14 +239,14 @@ public sealed class SenderCall_TransactionDecorator : IRequestDecorator, IReques
     public Task HandleAsync<TRequest>(
         TRequest request,
         RequestHandlerDelegate next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TRequest : IRequest =>
         next();
 
     public Task<TResponse> HandleAsync<TRequest, TResponse>(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TRequest : IRequest<TResponse> =>
         next();
 }
@@ -256,7 +256,7 @@ public sealed class SenderCall_StreamLoggingDecorator : IStreamRequestDecorator
     public async IAsyncEnumerable<TResponse> HandleAsync<TRequest, TResponse>(
         TRequest request,
         StreamHandlerDelegate<TResponse> next,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
         where TRequest : IStreamRequest<TResponse>
     {
         await foreach (var response in next().WithCancellation(cancellationToken))

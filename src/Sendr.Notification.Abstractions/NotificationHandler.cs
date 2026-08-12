@@ -14,7 +14,7 @@ public interface INotificationHandler<in TNotification>
     /// <param name="notification">The notification to handle.</param>
     /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
     /// <returns>A task that completes when the notification has been handled.</returns>
-    Task HandleAsync(TNotification notification, CancellationToken cancellationToken = default);
+    Task HandleAsync(TNotification notification, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -43,6 +43,6 @@ public interface INotificationDecorator
     Task HandleAsync<TNotification>(
         TNotification notification,
         NotificationHandlerDelegate next,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
         where TNotification : INotification;
 }
