@@ -70,6 +70,7 @@ jobs:
                 echo "src/Sendr/Sendr.csproj"
                 echo "src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj"
                 echo "src/Sendr.Notification/Sendr.Notification.csproj"
+                echo "src/Sendr.Message/Sendr.Message.csproj"
                 echo "EOF"
               } >> "$GITHUB_ENV"
               ;;
