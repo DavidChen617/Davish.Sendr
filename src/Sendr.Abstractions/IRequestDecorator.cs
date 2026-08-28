@@ -1,0 +1,66 @@
+namespace Davish.Sendr;
+
+/// <summary>
+/// Invokes the next step in a request pipeline (the inner decorator or the handler itself).
+/// </summary>
+/// <typeparam name="TResponse">The type of response returned by the next step.</typeparam>
+/// <returns>A task that resolves to the response produced by the next step.</returns>
+public delegate Task<TResponse> RequestHandlerDelegate<TResponse>();
+
+/// <summary>
+/// Invokes the next step in a request pipeline (the inner decorator or the handler itself)
+/// for a request that does not produce a response value.
+/// </summary>
+/// <returns>A task that completes when the next step has run.</returns>
+public delegate Task RequestHandlerDelegate();
+
+/// <summary>
+/// Adds cross-cutting behaviour (such as logging, validation, or transactions) around a
+/// request handler that does not produce a response value. A single decorator instance can
+/// be applied to any request type; the request type is a parameter of <see cref="HandleAsync"/>
+/// rather than of the interface.
+/// </summary>
+public interface IRequestDecorator
+{
+    /// <summary>
+    /// Wraps the handling of <paramref name="request"/>, calling <paramref name="next"/> to run
+    /// the inner pipeline step.
+    /// </summary>
+    /// <typeparam name="TRequest">The type of request being handled.</typeparam>
+    /// <param name="request">The request being handled.</param>
+    /// <param name="next">Invokes the inner decorator or the handler.</param>
+    /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
+    /// <returns>A task that completes when the request has been handled.</returns>
+    Task HandleAsync<TRequest>(
+        TRequest request,
+        RequestHandlerDelegate next,
+        CancellationToken cancellationToken
+    )
+        where TRequest : IRequest;
+
+    /// <summary>
+    /// Adds cross-cutting behaviour (such as logging, validation, or transactions) around a
+    /// request handler that produces a response. A single decorator instance can be applied to
+    /// any request/response pair; the types are parameters of <see cref="HandleAsync"/> rather
+    /// than of the interface.
+    /// </summary>
+    public interface WithResponse
+    {
+        /// <summary>
+        /// Wraps the handling of <paramref name="request"/>, calling <paramref name="next"/> to run
+        /// the inner pipeline step.
+        /// </summary>
+        /// <typeparam name="TRequest">The type of request being handled.</typeparam>
+        /// <typeparam name="TResponse">The type of response returned by the handler.</typeparam>
+        /// <param name="request">The request being handled.</param>
+        /// <param name="next">Invokes the inner decorator or the handler.</param>
+        /// <param name="cancellationToken">A token to observe while awaiting the operation.</param>
+        /// <returns>A task that resolves to the response produced for the request.</returns>
+        Task<TResponse> HandleAsync<TRequest, TResponse>(
+            TRequest request,
+            RequestHandlerDelegate<TResponse> next,
+            CancellationToken cancellationToken
+        )
+            where TRequest : IRequest<TResponse>;
+    }
+}

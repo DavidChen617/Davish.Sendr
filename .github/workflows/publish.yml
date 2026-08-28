@@ -2,11 +2,8 @@ name: CI
 
 on:
   push:
-    tags:
-      - 'v*'
-      - 'sendr-v*'
-      - 'notification-v*'
-      - 'message-v*'
+    branches:
+      - main
 
 jobs:
   build:
@@ -31,61 +28,16 @@ jobs:
       - name: Test
         run: dotnet test -c Release
 
-      - name: Resolve package set and version from tag
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-
-          case "$TAG" in
-            sendr-v*)
-              echo "PKG_VERSION=${TAG#sendr-v}" >> "$GITHUB_ENV"
-              {
-                echo "PROJECTS<<EOF"
-                echo "src/Sendr.Abstractions/Sendr.Abstractions.csproj"
-                echo "src/Sendr/Sendr.csproj"
-                echo "EOF"
-              } >> "$GITHUB_ENV"
-              ;;
-            notification-v*)
-              echo "PKG_VERSION=${TAG#notification-v}" >> "$GITHUB_ENV"
-              {
-                echo "PROJECTS<<EOF"
-                echo "src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj"
-                echo "src/Sendr.Notification/Sendr.Notification.csproj"
-                echo "EOF"
-              } >> "$GITHUB_ENV"
-              ;;
-            message-v*)
-              echo "PKG_VERSION=${TAG#message-v}" >> "$GITHUB_ENV"
-              {
-                echo "PROJECTS<<EOF"
-                echo "src/Sendr.Message/Sendr.Message.csproj"
-                echo "EOF"
-              } >> "$GITHUB_ENV"
-              ;;
-            v*)
-              echo "PKG_VERSION=${TAG#v}" >> "$GITHUB_ENV"
-              {
-                echo "PROJECTS<<EOF"
-                echo "src/Sendr.Abstractions/Sendr.Abstractions.csproj"
-                echo "src/Sendr/Sendr.csproj"
-                echo "src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj"
-                echo "src/Sendr.Notification/Sendr.Notification.csproj"
-                echo "src/Sendr.Message/Sendr.Message.csproj"
-                echo "EOF"
-              } >> "$GITHUB_ENV"
-              ;;
-            *)
-              echo "Unrecognized tag '$TAG' — expected 'v*', 'sendr-v*', 'notification-v*', or 'message-v*'" >&2
-              exit 1
-              ;;
-          esac
-
       - name: Pack
         run: |
-          while IFS= read -r proj; do
-            [ -z "$proj" ] && continue
-            dotnet pack "$proj" -c Release -o out -p:Version="$PKG_VERSION"
-          done <<< "$PROJECTS"
+          for proj in \
+            src/Sendr.Abstractions/Sendr.Abstractions.csproj \
+            src/Sendr/Sendr.csproj \
+            src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj \
+            src/Sendr.Notification/Sendr.Notification.csproj \
+            src/Sendr.Message/Sendr.Message.csproj; do
+            dotnet pack "$proj" -c Release -o out
+          done
 
       - name: NuGet login (OIDC)
         uses: NuGet/login@v1
