@@ -101,9 +101,9 @@ Resolve `ISender` and call `SendAsync`.
 ```csharp
 var sender = serviceProvider.GetRequiredService<ISender>();
 
-await sender.SendAsync(new CreateOrder(Guid.NewGuid()));
+await sender.SendAsync(new CreateOrder(Guid.NewGuid()), cancellationToken);
 
-var order = await sender.SendAsync(new GetOrder(Guid.NewGuid()));
+var order = await sender.SendAsync(new GetOrder(Guid.NewGuid()), cancellationToken);
 ```
 
 ## Commands and queries (CQRS)
@@ -211,7 +211,7 @@ Resolve `IStreamSender` and call `SendStream`.
 ```csharp
 var streamSender = serviceProvider.GetRequiredService<IStreamSender>();
 
-await foreach (var order in streamSender.SendStream(new ListOrders()))
+await foreach (var order in streamSender.SendStream(new ListOrders(), cancellationToken))
 {
     Console.WriteLine(order.Number);
 }
@@ -286,7 +286,7 @@ Resolve `IPublisher` and call `PublishAsync`. It takes the non-generic `INotific
 ```csharp
 var publisher = serviceProvider.GetRequiredService<IPublisher>();
 
-await publisher.PublishAsync(new OrderPlaced(order.Id));
+await publisher.PublishAsync(new OrderPlaced(order.Id), cancellationToken);
 ```
 
 Each handler entry can have its own decorator pipeline via `INotificationDecorator`, configured the same way as request decorators.
