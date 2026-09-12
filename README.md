@@ -6,7 +6,6 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.svg)](https://www.nuget.org/packages/Davish.Sendr/)
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.Notification.svg?label=nuget%20%28notification%29)](https://www.nuget.org/packages/Davish.Sendr.Notification/)
-[![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.Message.svg?label=nuget%20%28message%29)](https://www.nuget.org/packages/Davish.Sendr.Message/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -22,7 +21,7 @@ Sendr keeps the ergonomics you expect from a mediator — send a request, let a 
 - **Non-generic decorators** — a single decorator type wraps *any* compatible request, stream, or notification handler; no per-type boilerplate.
 - **Explicit registration** — every handler is registered by hand. No reflection-based assembly scanning, no surprises at startup.
 - **Multi-target** — builds for `netstandard2.0` and `net10.0`.
-- **Split packages** — depend only on the abstractions package from your domain layer; request/response and notification each ship as their own pair of packages, with an optional CQRS-flavored package on top.
+- **Split packages** — depend only on the abstractions package from your domain layer; request/response and notification each ship as their own pair of packages.
 
 > [!NOTE]
 > Unlike scanning-based mediators, Sendr never discovers handlers implicitly. Registration is a compile-time-checked call, so a missing handler is obvious at the composition root.
@@ -46,11 +45,10 @@ dotnet add package Davish.Sendr.Notification
 dotnet add package Davish.Sendr.Notification.Abstractions
 ```
 
-If you want the CQRS naming (`ICommand`, `IQuery`, …) instead of the plain `IRequest` contracts, add its own package too:
+If you want the CQRS naming (`ICommand`, `IQuery`, …) instead of the plain `IRequest` contracts, it's already there — no extra package needed, `ICommand`/`ICommandHandler`/`IQuery`/`IQueryHandler` ship in `Davish.Sendr.Abstractions` itself.
 
-```bash
-dotnet add package Davish.Sendr.Message
-```
+> [!NOTE]
+> `Davish.Sendr.Message` is deprecated — those types used to live there. The package still resolves (it now just references `Davish.Sendr.Abstractions`), so existing references keep compiling, but new projects should reference `Davish.Sendr.Abstractions`/`Davish.Sendr` directly instead.
 
 ## Getting started
 
@@ -108,14 +106,14 @@ var order = await sender.SendAsync(new GetOrder(Guid.NewGuid()), cancellationTok
 
 ## Commands and queries (CQRS)
 
-`Davish.Sendr.Message` adds `ICommand` / `ICommand<TResponse>` and `IQuery<TResponse>` on top of `IRequest` / `IRequest<TResponse>` — same dispatch, same decorators, just names that say which side of CQRS a request belongs to.
+`ICommand` / `ICommand<TResponse>` and `IQuery<TResponse>` are their own hierarchy, independent of `IRequest` / `IRequest<TResponse>` — not a wrapper over it. Each has its own handler interface, its own `ISender.SendAsync` overload, its own registration method, and its own decorator interface (`ICommandDecorator` / `IQueryDecorator`), so a command or query handler never implements `IRequestHandler`.
 
 ```csharp
 public sealed record CreateOrder(Guid Id) : ICommand;
 
 public sealed class CreateOrderHandler : ICommandHandler<CreateOrder>
 {
-    public Task HandleAsync(CreateOrder request, CancellationToken cancellationToken = default)
+    public Task HandleAsync(CreateOrder command, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
@@ -127,20 +125,35 @@ public sealed record OrderDto(Guid Id, string Number);
 
 public sealed class GetOrderHandler : IQueryHandler<GetOrder, OrderDto>
 {
-    public Task<OrderDto> HandleAsync(GetOrder request, CancellationToken cancellationToken = default)
+    public Task<OrderDto> HandleAsync(GetOrder query, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new OrderDto(request.Id, "SO-001"));
+        return Task.FromResult(new OrderDto(query.Id, "SO-001"));
     }
 }
 ```
 
-Registration and dispatch are unchanged — `ICommand`/`IQuery` are `IRequest`/`IRequest<TResponse>` under the hood, so they go through the same `AddRequestHandler` and `ISender.SendAsync` you already use.
+Register with `AddCommandHandler`/`AddQueryHandler` instead of `AddRequestHandler`. `ISender.SendAsync` still resolves the right overload from the argument's static type — call sites don't change.
 
 ```csharp
 builder.Services
     .AddSendr()
-    .AddRequestHandler<CreateOrder, CreateOrderHandler>()
-    .AddRequestHandler<GetOrder, OrderDto, GetOrderHandler>();
+    .AddCommandHandler<CreateOrder, CreateOrderHandler>()
+    .AddQueryHandler<GetOrder, OrderDto, GetOrderHandler>();
+```
+
+Decorators for commands/queries implement `ICommandDecorator`/`IQueryDecorator` rather than `IRequestDecorator` — the same shape, just constrained to `ICommand`/`IQuery` instead of `IRequest`:
+
+```csharp
+public sealed class LoggingCommandDecorator(ILogger<LoggingCommandDecorator> logger) : ICommandDecorator
+{
+    public async Task HandleAsync<TCommand>(
+        TCommand command, RequestHandlerDelegate next, CancellationToken cancellationToken = default)
+        where TCommand : ICommand
+    {
+        logger.LogInformation("Handling {Command}", typeof(TCommand).Name);
+        await next();
+    }
+}
 ```
 
 ## Decorators
