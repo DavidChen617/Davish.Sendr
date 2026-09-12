@@ -212,7 +212,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 
 ```xml
 <PackageReference Include="Davish.Sendr" Version="3.0.0" />
-<PackageReference Include="Davish.Sendr.Generators" Version="1.0.0" PrivateAssets="all" />
+<PackageReference Include="Davish.Sendr.Generators" Version="1.1.0" PrivateAssets="all" />
 ```
 
 ```csharp
@@ -236,7 +236,8 @@ Notes:
 - `[Decorate<...>]` comes in arities 1 through 8; apply at most one per handler class.
 - Generic (open) handler classes aren't discovered — register those manually with `AddRequestHandler`/`AddStreamRequestHandler` (without `UseGenerators()`).
 - A duplicate handler for the same request type is a compile error (`SENDR002`), not a silent pick.
-- `INotificationHandler` (the `Davish.Sendr.Notification` package) isn't covered — sequence/parallel grouping is a per-app decision the generator doesn't infer.
+- `ICommandHandler`/`IQueryHandler` are discovered the same way — `[Decorate<...>]` on a command/query handler validates against `ICommandDecorator`/`IQueryDecorator` instead.
+- `INotificationHandler` is covered too — see [Notification: source-generated registration](#notification-source-generated-registration-opt-in) below, since it plugs into `AddSendrNotification` rather than `AddSendr`.
 
 ## Streams
 
@@ -368,7 +369,36 @@ public sealed class LoggingNotificationDecorator(ILogger<LoggingNotificationDeco
 ```
 
 > [!IMPORTANT]
-> The Parallel group is still evolving. Handlers run concurrently via `Task.WhenAll`, so write them as proper `async` methods — a handler that throws synchronously instead of through an awaited `Task` can prevent handlers queued after it from running. If more than one handler fails, only the first exception surfaces from `PublishAsync`. Handlers don't get an isolated DI scope either, so avoid sharing a non-thread-safe scoped service (such as a `DbContext`) across Parallel entries.
+> Both groups run every handler regardless of earlier failures — Sequence doesn't stop at the first throw, it just runs one handler at a time instead of concurrently. Every exception is collected: zero stay silent, exactly one is rethrown as itself (preserving its original stack trace), and two or more are combined into one `AggregateException` from `PublishAsync`. Handlers don't get an isolated DI scope either, so avoid sharing a non-thread-safe scoped service (such as a `DbContext`) across Parallel entries.
 
 > [!NOTE]
 > `AddNotificationHandler<TNotification>` can only be called once per notification type — it throws on a second call, since the Sequence's order is only meaningful when every handler for that notification is declared together.
+
+## Notification: source-generated registration (opt-in)
+
+`Davish.Sendr.Generators` also discovers your `INotificationHandler<T>` implementations at compile time and generates `UseGenerators()`, a `NotificationOptions` extension that plugs into `AddSendrNotification`, backed by a reflection-free `IPublisher`.
+
+Unlike request/command/query handlers, any number of classes may handle the same notification type — that's the normal case, not a conflict — so there's no per-handler attribute and no `SENDR002` dedup for notifications. Instead, `RunAs` is a single, global choice for how handlers of the *same* notification run relative to each other, defaulting to `Sequence`:
+
+```csharp
+builder.Services.AddSendrNotification(o => o.UseGenerators());
+
+// Or, to run same-notification handlers concurrently instead:
+builder.Services.AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel)));
+```
+
+Decorators are declared with `[Decorate<...>]` the same way, validated against `INotificationDecorator`:
+
+```csharp
+[Decorate<LoggingNotificationDecorator>]
+public sealed class ReserveInventoryHandler : INotificationHandler<OrderPlaced>
+{
+    public Task HandleAsync(OrderPlaced notification, CancellationToken cancellationToken) { /* ... */ }
+}
+```
+
+Notes:
+
+- No ordering is guaranteed among handlers of the same notification, whether `Sequence` or `Parallel` — `RunAs` only chooses one-at-a-time vs. concurrent execution, not a priority between handlers.
+- `o.UseGenerators()` and manual `AddNotificationHandler` calls don't mix for the *same* notification type, same as the request-side generator.
+- Exception aggregation (the 0/1/2+ rule described above) is identical to the manual registration path — both call the same `NotificationGroupRunner`.
