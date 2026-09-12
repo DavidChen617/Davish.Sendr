@@ -1,4 +1,4 @@
-using Davish.Sendr;
+using Davish.Sendr.Implements;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 // ReSharper disable once CheckNamespace
@@ -96,7 +96,7 @@ public sealed class NotificationHandlerOptions<TNotification>
             foreach (var decoratorType in decorators)
             {
                 var decorator = (INotificationDecorator)sp.GetRequiredService(decoratorType);
-                handler = new NotificationDecoratorHandlerImpl<TNotification>(decorator, handler);
+                handler = new NotificationDecoratorHandler<TNotification>(decorator, handler);
             }
 
             return handler.HandleAsync(notification, cancellationToken);

@@ -1,4 +1,3 @@
-using Davish.Sendr;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Davish.Sendr.Implements;
