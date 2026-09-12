@@ -20,9 +20,16 @@ public static class NotificationGroupRunner
     public static async Task RunSequenceAsync(
         IReadOnlyList<Func<CancellationToken, Task>> steps, CancellationToken cancellationToken)
     {
+        // Snapshotted up front: steps is typed as IReadOnlyList, but the caller may have handed
+        // in a mutable List<T> they still hold a reference to. If a step's own body appends to
+        // that same list while this loop is mid-enumeration (observed with a step that does so
+        // synchronously), a plain foreach over the live list throws InvalidOperationException
+        // ("Collection was modified"). Copying once before iterating decouples this run from any
+        // later mutation of the caller's list.
+        var snapshot = steps as Func<CancellationToken, Task>[] ?? steps.ToArray();
         List<Exception>? exceptions = null;
 
-        foreach (var step in steps)
+        foreach (var step in snapshot)
         {
             try
             {
@@ -48,17 +55,22 @@ public static class NotificationGroupRunner
     public static async Task RunParallelAsync(
         IReadOnlyList<Func<CancellationToken, Task>> steps, CancellationToken cancellationToken)
     {
-        if (steps.Count == 0)
+        // See RunSequenceAsync: snapshotted up front so a step that appends to the caller's own
+        // mutable list while this loop is running can't grow steps.Count mid-loop out from under
+        // the pre-sized tasks array (observed as IndexOutOfRangeException without this).
+        var snapshot = steps as Func<CancellationToken, Task>[] ?? steps.ToArray();
+
+        if (snapshot.Length == 0)
             return;
 
-        var tasks = new Task[steps.Count];
+        var tasks = new Task[snapshot.Length];
         List<Exception>? exceptions = null;
 
-        for (var i = 0; i < steps.Count; i++)
+        for (var i = 0; i < snapshot.Length; i++)
         {
             try
             {
-                tasks[i] = steps[i](cancellationToken);
+                tasks[i] = snapshot[i](cancellationToken);
             }
             catch (Exception ex)
             {
