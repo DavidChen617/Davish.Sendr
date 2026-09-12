@@ -214,7 +214,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 `Davish.Sendr.Generators` discovers your `IRequestHandler`/`IStreamRequestHandler` implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr` and replaces every manual `AddRequestHandler`/`AddStreamRequestHandler` call, backed by a reflection-free `ISender`/`IStreamSender` — dispatch is a compile-time-built `Dictionary<Type, Func<...>>` lookup, not `MakeGenericType` + compiled expression trees.
 
 ```xml
-<PackageReference Include="Davish.Sendr" Version="3.2.0" />
+<PackageReference Include="Davish.Sendr" Version="3.2.1" />
 <PackageReference Include="Davish.Sendr.Generators" Version="1.1.5" PrivateAssets="all" />
 ```
 
