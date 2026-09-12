@@ -63,7 +63,7 @@ public class NotificationHandlersTests
     }
 
     [Fact]
-    public async Task GivenEarlierHandlerThrows_WhenPublish_ThenLaterHandlersDoNotRun()
+    public async Task GivenSyncThrowingSequenceHandler_WhenPublish_ThenLaterHandlersStillRun()
     {
         // Given
         var provider = new ServiceCollection()
@@ -80,13 +80,14 @@ public class NotificationHandlersTests
         // When
         var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
-        // Then
+        // Then: a handler that throws synchronously doesn't stop the rest of the Sequence either
+        // — RunSequenceAsync's try/catch wraps the call itself, not just the await.
         await Assert.ThrowsAsync<InvalidOperationException>(act);
-        Assert.Empty(collector.LogCollection);
+        Assert.Equal(["Second"], collector.LogCollection);
     }
 
     [Fact]
-    public async Task GivenMiddleSequenceHandlerThrows_WhenPublish_ThenOnlyEarlierHandlerRan()
+    public async Task GivenSyncThrowingMiddleSequenceHandler_WhenPublish_ThenLaterHandlersStillRun()
     {
         // Given
         var provider = new ServiceCollection()
@@ -106,7 +107,34 @@ public class NotificationHandlersTests
 
         // Then
         await Assert.ThrowsAsync<InvalidOperationException>(act);
-        Assert.Equal(["First"], collector.LogCollection);
+        Assert.Equal(["First", "Third"], collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenAsyncSequenceHandlerThrows_WhenPublish_ThenLaterHandlersStillRun()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendrNotification()
+            .AddNotificationHandler<SomeNotification>(x =>
+                x.Handler.Sequence
+                    .With<FirstNotificationHandler>()
+                    .With<ThrowingAsyncNotificationHandler>()
+                    .With<SecondNotificationHandler>())
+            .BuildServiceProvider();
+        var collector = provider.GetService<LogCollector>()!;
+        var publisher = provider.GetService<IPublisher>()!;
+
+        // When
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
+
+        // Then: Sequence keeps running in order after a failure — whether it throws
+        // synchronously (above) or asynchronously (here). Since only one handler actually
+        // failed, the single exception surfaces unwrapped.
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(act);
+        Assert.Equal("boom-async", exception.Message);
+        Assert.Equal(["First", "Second"], collector.LogCollection);
     }
 
     [Fact]
@@ -154,11 +182,8 @@ public class NotificationHandlersTests
         Assert.Contains("Second", collector.LogCollection);
     }
 
-    // Pins a known gap (see NotificationHandlers<TNotification> remarks): a handler that throws
-    // synchronously instead of via an async Task fault aborts the Select/Task.WhenAll enumeration,
-    // so handlers queued after it never run — unlike the async-throw case above.
     [Fact]
-    public async Task GivenSyncThrowingParallelHandler_WhenPublish_ThenLaterHandlersAreSkipped()
+    public async Task GivenSyncThrowingParallelHandler_WhenPublish_ThenOtherHandlersStillRun()
     {
         // Given
         var provider = new ServiceCollection()
@@ -175,9 +200,11 @@ public class NotificationHandlersTests
         // When
         var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
-        // Then
+        // Then: a handler that throws synchronously while starting doesn't stop the remaining
+        // Parallel steps from starting either — RunParallelAsync's try/catch wraps each step's
+        // invocation, not just its await.
         await Assert.ThrowsAsync<InvalidOperationException>(act);
-        Assert.DoesNotContain("Second", collector.LogCollection);
+        Assert.Contains("Second", collector.LogCollection);
     }
 
     [Fact]
@@ -256,7 +283,7 @@ public class NotificationHandlersTests
     }
 
     [Fact]
-    public async Task GivenBothGroupsThrow_WhenPublish_ThenEarlierSequenceHandlerAndSurvivingParallelHandlerRan()
+    public async Task GivenBothGroupsThrow_WhenPublish_ThenAllHandlersRunAndBothExceptionsAggregate()
     {
         // Given
         var provider = new ServiceCollection()
@@ -279,11 +306,41 @@ public class NotificationHandlersTests
         // When
         var act = () => publisher.PublishAsync(new SomeNotification(), default);
 
-        // Then: Sequence fail-fast stops before "Third"; Parallel's surviving handler still runs.
-        await Assert.ThrowsAsync<InvalidOperationException>(act);
-        Assert.Contains("First", collector.LogCollection);
-        Assert.DoesNotContain("Third", collector.LogCollection);
+        // Then: neither group stops at its failure — "Third" still runs in Sequence, "Second"
+        // still runs in Parallel. Both groups genuinely failed, so both exceptions surface
+        // together rather than one silently losing to the other.
+        var exception = await Assert.ThrowsAsync<AggregateException>(act);
+        Assert.Equal(2, exception.InnerExceptions.Count);
+        Assert.All(exception.InnerExceptions, ex => Assert.IsType<InvalidOperationException>(ex));
+        Assert.Contains(exception.InnerExceptions, ex => ex.Message == "boom");
+        Assert.Contains(exception.InnerExceptions, ex => ex.Message == "boom-async");
+        Assert.Equal(["First", "Third"], collector.LogCollection.Where(x => x is "First" or "Third"));
         Assert.Contains("Second", collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenMultipleParallelHandlersThrow_WhenPublish_ThenAllExceptionsAreAggregated()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendrNotification()
+            .AddNotificationHandler<SomeNotification>(x =>
+                x.Handler.Parallel
+                    .With<ThrowingAsyncNotificationHandler>()
+                    .With<SecondThrowingAsyncNotificationHandler>())
+            .BuildServiceProvider();
+        var publisher = provider.GetService<IPublisher>()!;
+
+        // When
+        var act = () => publisher.PublishAsync(new SomeNotification(), default);
+
+        // Then: a bare await Task.WhenAll(...) would only ever surface one of these — both
+        // handlers actually failed, so both exceptions must be visible.
+        var exception = await Assert.ThrowsAsync<AggregateException>(act);
+        Assert.Equal(2, exception.InnerExceptions.Count);
+        Assert.Contains(exception.InnerExceptions, ex => ex.Message == "boom-async");
+        Assert.Contains(exception.InnerExceptions, ex => ex.Message == "boom-async-2");
     }
 
     [Fact]
@@ -350,6 +407,15 @@ public sealed class ThrowingAsyncNotificationHandler : INotificationHandler<Some
     {
         await Task.Yield();
         throw new InvalidOperationException("boom-async");
+    }
+}
+
+public sealed class SecondThrowingAsyncNotificationHandler : INotificationHandler<SomeNotification>
+{
+    public async Task HandleAsync(SomeNotification notification, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        throw new InvalidOperationException("boom-async-2");
     }
 }
 
