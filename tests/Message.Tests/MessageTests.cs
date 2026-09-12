@@ -12,7 +12,7 @@ public class MessageTests
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
             .AddSendr()
-            .AddRequestHandler<SomeCommand, SomeCommandHandler>()
+            .AddCommandHandler<SomeCommand, SomeCommandHandler>()
             .BuildServiceProvider();
         var collector = provider.GetService<LogCollector>()!;
         var sender = provider.GetService<ISender>()!;
@@ -30,7 +30,7 @@ public class MessageTests
         // Given
         var sender = new ServiceCollection()
             .AddSendr()
-            .AddRequestHandler<SomeCommandWithResponse, SomeId, SomeCommandWithResponseHandler>()
+            .AddCommandHandler<SomeCommandWithResponse, SomeId, SomeCommandWithResponseHandler>()
             .BuildServiceProvider()
             .GetService<ISender>()!;
 
@@ -47,7 +47,7 @@ public class MessageTests
         // Given
         var sender = new ServiceCollection()
             .AddSendr()
-            .AddRequestHandler<SomeQuery, SomeDto, SomeQueryHandler>()
+            .AddQueryHandler<SomeQuery, SomeDto, SomeQueryHandler>()
             .BuildServiceProvider()
             .GetService<ISender>()!;
 
@@ -65,7 +65,7 @@ public class MessageTests
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
             .AddSendr()
-            .AddRequestHandler<SomeCommand, SomeCommandHandler>(x =>
+            .AddCommandHandler<SomeCommand, SomeCommandHandler>(x =>
                 x.Decorator.With<LoggingDecorator>())
             .BuildServiceProvider();
         var collector = provider.GetService<LogCollector>()!;
@@ -84,7 +84,7 @@ public class MessageTests
         // Given
         var sender = new ServiceCollection()
             .AddSendr()
-            .AddRequestHandler<ThrowingCommand, ThrowingCommandHandler>()
+            .AddCommandHandler<ThrowingCommand, ThrowingCommandHandler>()
             .BuildServiceProvider()
             .GetService<ISender>()!;
 
@@ -101,7 +101,7 @@ public class MessageTests
         // Given
         var sender = new ServiceCollection()
             .AddSendr()
-            .AddRequestHandler<ThrowingQuery, SomeDto, ThrowingQueryHandler>()
+            .AddQueryHandler<ThrowingQuery, SomeDto, ThrowingQueryHandler>()
             .BuildServiceProvider()
             .GetService<ISender>()!;
 
@@ -117,7 +117,7 @@ public sealed record SomeCommand : ICommand;
 
 public sealed class SomeCommandHandler(LogCollector collector) : ICommandHandler<SomeCommand>
 {
-    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken)
+    public Task HandleAsync(SomeCommand command, CancellationToken cancellationToken)
     {
         collector.LogCollection.Add("Handled");
         return Task.CompletedTask;
@@ -130,7 +130,7 @@ public sealed record SomeCommandWithResponse : ICommand<SomeId>;
 
 public sealed class SomeCommandWithResponseHandler : ICommandHandler<SomeCommandWithResponse, SomeId>
 {
-    public Task<SomeId> HandleAsync(SomeCommandWithResponse request, CancellationToken cancellationToken)
+    public Task<SomeId> HandleAsync(SomeCommandWithResponse command, CancellationToken cancellationToken)
     {
         return Task.FromResult(new SomeId(1));
     }
@@ -142,7 +142,7 @@ public sealed record SomeDto;
 
 public sealed class SomeQueryHandler : IQueryHandler<SomeQuery, SomeDto>
 {
-    public Task<SomeDto> HandleAsync(SomeQuery request, CancellationToken cancellationToken)
+    public Task<SomeDto> HandleAsync(SomeQuery query, CancellationToken cancellationToken)
     {
         return Task.FromResult(new SomeDto());
     }
@@ -152,7 +152,7 @@ public sealed record ThrowingCommand : ICommand;
 
 public sealed class ThrowingCommandHandler : ICommandHandler<ThrowingCommand>
 {
-    public Task HandleAsync(ThrowingCommand request, CancellationToken cancellationToken)
+    public Task HandleAsync(ThrowingCommand command, CancellationToken cancellationToken)
         => throw new InvalidOperationException("boom");
 }
 
@@ -160,7 +160,7 @@ public sealed record ThrowingQuery : IQuery<SomeDto>;
 
 public sealed class ThrowingQueryHandler : IQueryHandler<ThrowingQuery, SomeDto>
 {
-    public Task<SomeDto> HandleAsync(ThrowingQuery request, CancellationToken cancellationToken)
+    public Task<SomeDto> HandleAsync(ThrowingQuery query, CancellationToken cancellationToken)
         => throw new InvalidOperationException("boom");
 }
 
@@ -169,11 +169,11 @@ public sealed class LogCollector
     public readonly List<string> LogCollection = new();
 }
 
-public sealed class LoggingDecorator(LogCollector collector) : IRequestDecorator
+public sealed class LoggingDecorator(LogCollector collector) : ICommandDecorator
 {
-    public async Task HandleAsync<TRequest>(
-        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
-        where TRequest : IRequest
+    public async Task HandleAsync<TCommand>(
+        TCommand command, RequestHandlerDelegate next, CancellationToken cancellationToken)
+        where TCommand : ICommand
     {
         collector.LogCollection.Add("Start");
         await next();

@@ -3,8 +3,8 @@
   <PropertyGroup>
     <PackageId>Davish.Sendr.Message</PackageId>
     <AssemblyName>Davish.Sendr.Message</AssemblyName>
-    <Version>1.0.0</Version>
-    <Description>CQRS message contracts for Davish.Sendr — ICommand, ICommandHandler, IQuery, IQueryHandler.</Description>
+    <Version>2.0.0</Version>
+    <Description>DEPRECATED: ICommand/ICommandHandler/IQuery/IQueryHandler have moved into Davish.Sendr.Abstractions (3.1.0+) and ship with Davish.Sendr itself. This package is kept only so existing references keep resolving via its dependency on Davish.Sendr.Abstractions; it has no content of its own. Reference Davish.Sendr.Abstractions directly instead — this package will be removed in a future major version.</Description>
   </PropertyGroup>
   
   <ItemGroup>

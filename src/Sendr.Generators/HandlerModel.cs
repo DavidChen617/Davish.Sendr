@@ -7,6 +7,9 @@ internal enum HandlerKind
     Request,
     RequestResponse,
     Stream,
+    Command,
+    CommandResponse,
+    Query,
 }
 
 /// <summary>

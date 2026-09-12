@@ -8,10 +8,11 @@ using Microsoft.CodeAnalysis.Text;
 namespace Davish.Sendr;
 
 /// <summary>
-/// Discovers <c>IRequestHandler</c>/<c>IStreamRequestHandler</c> implementations in the current
-/// compilation and emits <c>AddSendrGenerated()</c>: a self-contained DI registration plus a
-/// reflection-free <c>ISender</c>/<c>IStreamSender</c> implementation that dispatches via a
-/// compile-time type switch instead of <c>MakeGenericType</c> + compiled expression trees.
+/// Discovers <c>IRequestHandler</c>/<c>IStreamRequestHandler</c>/<c>ICommandHandler</c>/
+/// <c>IQueryHandler</c> implementations in the current compilation and generates
+/// <c>UseGenerators()</c>: a self-contained DI registration plus a reflection-free
+/// <c>ISender</c>/<c>IStreamSender</c> implementation that dispatches via compile-time-built
+/// lookup tables instead of <c>MakeGenericType</c> + compiled expression trees.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class SendrSourceGenerator : IIncrementalGenerator
@@ -19,11 +20,17 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     private const string RequestHandlerMetadataName = "Davish.Sendr.IRequestHandler`1";
     private const string RequestResponseHandlerMetadataName = "Davish.Sendr.IRequestHandler`2";
     private const string StreamHandlerMetadataName = "Davish.Sendr.IStreamRequestHandler`2";
+    private const string CommandHandlerMetadataName = "Davish.Sendr.ICommandHandler`1";
+    private const string CommandResponseHandlerMetadataName = "Davish.Sendr.ICommandHandler`2";
+    private const string QueryHandlerMetadataName = "Davish.Sendr.IQueryHandler`2";
     private const string DecorateAttributeNamespace = "Davish.Sendr";
     private const string DecorateAttributeName = "DecorateAttribute";
     private const string RequestDecoratorMetadataName = "Davish.Sendr.IRequestDecorator";
     private const string RequestDecoratorWithResponseMetadataName = "Davish.Sendr.IRequestDecorator+WithResponse";
     private const string StreamDecoratorMetadataName = "Davish.Sendr.IStreamRequestDecorator";
+    private const string CommandDecoratorMetadataName = "Davish.Sendr.ICommandDecorator";
+    private const string CommandDecoratorWithResponseMetadataName = "Davish.Sendr.ICommandDecorator+WithResponse";
+    private const string QueryDecoratorMetadataName = "Davish.Sendr.IQueryDecorator";
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -54,8 +61,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         var requestHandler1 = compilation.GetTypeByMetadataName(RequestHandlerMetadataName);
         var requestHandler2 = compilation.GetTypeByMetadataName(RequestResponseHandlerMetadataName);
         var streamHandler2 = compilation.GetTypeByMetadataName(StreamHandlerMetadataName);
+        var commandHandler1 = compilation.GetTypeByMetadataName(CommandHandlerMetadataName);
+        var commandHandler2 = compilation.GetTypeByMetadataName(CommandResponseHandlerMetadataName);
+        var queryHandler2 = compilation.GetTypeByMetadataName(QueryHandlerMetadataName);
 
-        if (requestHandler1 is null && requestHandler2 is null && streamHandler2 is null)
+        if (requestHandler1 is null && requestHandler2 is null && streamHandler2 is null &&
+            commandHandler1 is null && commandHandler2 is null && queryHandler2 is null)
             return ImmutableArray<AnalysisResult>.Empty;
 
         var results = ImmutableArray.CreateBuilder<AnalysisResult>();
@@ -71,6 +82,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
                 kind = HandlerKind.Stream;
             else if (requestHandler1 is not null && SymbolEqualityComparer.Default.Equals(original, requestHandler1))
                 kind = HandlerKind.Request;
+            else if (commandHandler2 is not null && SymbolEqualityComparer.Default.Equals(original, commandHandler2))
+                kind = HandlerKind.CommandResponse;
+            else if (commandHandler1 is not null && SymbolEqualityComparer.Default.Equals(original, commandHandler1))
+                kind = HandlerKind.Command;
+            else if (queryHandler2 is not null && SymbolEqualityComparer.Default.Equals(original, queryHandler2))
+                kind = HandlerKind.Query;
             else
                 continue;
 
@@ -97,13 +114,16 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
 
         var typeArgs = interfaceSymbol.TypeArguments;
         var requestType = ToGlobalName(typeArgs[0]);
-        var responseType = kind == HandlerKind.Request ? null : ToGlobalName(typeArgs[1]);
+        var responseType = kind is HandlerKind.Request or HandlerKind.Command ? null : ToGlobalName(typeArgs[1]);
 
         var (requiredMetadataName, requiredDisplayName) = kind switch
         {
             HandlerKind.Request => (RequestDecoratorMetadataName, "Davish.Sendr.IRequestDecorator"),
             HandlerKind.RequestResponse => (RequestDecoratorWithResponseMetadataName, "Davish.Sendr.IRequestDecorator.WithResponse"),
             HandlerKind.Stream => (StreamDecoratorMetadataName, "Davish.Sendr.IStreamRequestDecorator"),
+            HandlerKind.Command => (CommandDecoratorMetadataName, "Davish.Sendr.ICommandDecorator"),
+            HandlerKind.CommandResponse => (CommandDecoratorWithResponseMetadataName, "Davish.Sendr.ICommandDecorator.WithResponse"),
+            HandlerKind.Query => (QueryDecoratorMetadataName, "Davish.Sendr.IQueryDecorator"),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 

@@ -23,7 +23,7 @@ internal static class SourceBuilder
 
         sb.AppendLine("namespace Davish.Sendr.Generated");
         sb.AppendLine("{");
-        sb.AppendLine("    internal sealed class GeneratedSender : global::Davish.Sendr.ISender, global::Davish.Sendr.IStreamSender");
+        sb.AppendLine("    internal sealed class GeneratedSender : global::Davish.Sendr.ISender");
         sb.AppendLine("    {");
         sb.AppendLine("        private readonly global::System.IServiceProvider _sp;");
         sb.AppendLine();
@@ -35,6 +35,12 @@ internal static class SourceBuilder
         AppendSendAsyncWithResponse(sb, models.Where(m => m.Kind == HandlerKind.RequestResponse).ToImmutableArray());
         sb.AppendLine();
         AppendSendStream(sb, models.Where(m => m.Kind == HandlerKind.Stream).ToImmutableArray());
+        sb.AppendLine();
+        AppendSendAsyncCommand(sb, models.Where(m => m.Kind == HandlerKind.Command).ToImmutableArray());
+        sb.AppendLine();
+        AppendSendAsyncCommandWithResponse(sb, models.Where(m => m.Kind == HandlerKind.CommandResponse).ToImmutableArray());
+        sb.AppendLine();
+        AppendSendAsyncQuery(sb, models.Where(m => m.Kind == HandlerKind.Query).ToImmutableArray());
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
@@ -192,6 +198,111 @@ internal static class SourceBuilder
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
         sb.AppendLine("                $\"Davish.Sendr: no IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("        }");
+    }
+
+    private static void AppendSendAsyncCommand(StringBuilder sb, ImmutableArray<HandlerModel> models)
+    {
+        sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
+        sb.AppendLine("            global::System.Type,");
+        sb.AppendLine("            global::System.Func<global::System.IServiceProvider, global::Davish.Sendr.ICommand, " +
+                      "global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task>> _commandHandlers = new()");
+        sb.AppendLine("        {");
+
+        foreach (var model in models)
+        {
+            sb.AppendLine($"            [typeof({model.RequestType})] = static (sp, command, cancellationToken) =>");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                var r = ({model.RequestType})command;");
+            sb.AppendLine($"                var h = (global::Davish.Sendr.ICommandHandler<{model.RequestType}>)" +
+                           $"sp.GetRequiredService<{model.HandlerType}>();");
+            AppendDecoratorLocals(sb, model, "global::Davish.Sendr.ICommandDecorator");
+            var call = BuildComposedCall(model, "h.HandleAsync(r, cancellationToken)");
+            sb.AppendLine($"                return {call};");
+            sb.AppendLine("            },");
+        }
+
+        sb.AppendLine("        };");
+        sb.AppendLine();
+        sb.AppendLine("        public global::System.Threading.Tasks.Task SendAsync(");
+        sb.AppendLine("            global::Davish.Sendr.ICommand command,");
+        sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (_commandHandlers.TryGetValue(command.GetType(), out var handler))");
+        sb.AppendLine("                return handler(_sp, command, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                $\"Davish.Sendr: no ICommandHandler<{command.GetType()}> is registered.\");");
+        sb.AppendLine("        }");
+    }
+
+    private static void AppendSendAsyncCommandWithResponse(StringBuilder sb, ImmutableArray<HandlerModel> models)
+    {
+        sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
+        sb.AppendLine("            global::System.Type,");
+        sb.AppendLine("            global::System.Func<global::System.IServiceProvider, global::Davish.Sendr.ICommand, " +
+                      "global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task>> _commandResponseHandlers = new()");
+        sb.AppendLine("        {");
+
+        foreach (var model in models)
+        {
+            sb.AppendLine($"            [typeof({model.RequestType})] = static (sp, command, cancellationToken) =>");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                var r = ({model.RequestType})command;");
+            sb.AppendLine($"                var h = (global::Davish.Sendr.ICommandHandler<{model.RequestType}, {model.ResponseType}>)" +
+                           $"sp.GetRequiredService<{model.HandlerType}>();");
+            AppendDecoratorLocals(sb, model, "global::Davish.Sendr.ICommandDecorator.WithResponse");
+            var call = BuildComposedCall(model, "h.HandleAsync(r, cancellationToken)");
+            sb.AppendLine($"                return {call};"); // Task<{ResponseType}> is-a Task, no cast needed here.
+            sb.AppendLine("            },");
+        }
+
+        sb.AppendLine("        };");
+        sb.AppendLine();
+        sb.AppendLine("        public global::System.Threading.Tasks.Task<TResponse> SendAsync<TResponse>(");
+        sb.AppendLine("            global::Davish.Sendr.ICommand<TResponse> command,");
+        sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (_commandResponseHandlers.TryGetValue(command.GetType(), out var handler))");
+        sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                $\"Davish.Sendr: no ICommandHandler<{command.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("        }");
+    }
+
+    private static void AppendSendAsyncQuery(StringBuilder sb, ImmutableArray<HandlerModel> models)
+    {
+        sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
+        sb.AppendLine("            global::System.Type,");
+        sb.AppendLine("            global::System.Func<global::System.IServiceProvider, object, " +
+                      "global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task>> _queryHandlers = new()");
+        sb.AppendLine("        {");
+
+        foreach (var model in models)
+        {
+            sb.AppendLine($"            [typeof({model.RequestType})] = static (sp, query, cancellationToken) =>");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                var r = ({model.RequestType})query;");
+            sb.AppendLine($"                var h = (global::Davish.Sendr.IQueryHandler<{model.RequestType}, {model.ResponseType}>)" +
+                           $"sp.GetRequiredService<{model.HandlerType}>();");
+            AppendDecoratorLocals(sb, model, "global::Davish.Sendr.IQueryDecorator");
+            var call = BuildComposedCall(model, "h.HandleAsync(r, cancellationToken)");
+            sb.AppendLine($"                return {call};"); // Task<{ResponseType}> is-a Task, no cast needed here.
+            sb.AppendLine("            },");
+        }
+
+        sb.AppendLine("        };");
+        sb.AppendLine();
+        sb.AppendLine("        public global::System.Threading.Tasks.Task<TResponse> SendAsync<TResponse>(");
+        sb.AppendLine("            global::Davish.Sendr.IQuery<TResponse> query,");
+        sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (_queryHandlers.TryGetValue(query.GetType(), out var handler))");
+        sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                $\"Davish.Sendr: no IQueryHandler<{query.GetType()}, {typeof(TResponse)}> is registered.\");");
         sb.AppendLine("        }");
     }
 

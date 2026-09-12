@@ -111,6 +111,92 @@ public class GeneratorTests
         Assert.Equal([1, 2, 3], items);
         Assert.Equal(["StreamStart", "StreamEnd"], collector.LogCollection);
     }
+
+    [Fact]
+    public async Task GivenGeneratedSender_WhenSendCqrsCommand_ThenHandled()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var sender = provider.GetRequiredService<ISender>();
+
+        // When
+        await sender.SendAsync(new GenCqrsCommand(), default);
+
+        // Then
+        Assert.Equal(["CommandHandled"], collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenGeneratedSender_WhenSendCqrsCommandWithResponse_ThenHandlerResponseReturned()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When
+        var result = await sender.SendAsync(new GenCqrsCommandWithResponse(), default);
+
+        // Then
+        Assert.IsType<GenSomeDto>(result);
+    }
+
+    [Fact]
+    public async Task GivenGeneratedSender_WhenSendCqrsQuery_ThenHandlerResponseReturned()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When
+        var result = await sender.SendAsync(new GenCqrsQuery(), default);
+
+        // Then
+        Assert.IsType<GenSomeDto>(result);
+    }
+
+    [Fact]
+    public async Task GivenGeneratedSender_WhenSendDecoratedCqrsCommand_ThenDecoratorRunsAroundHandler()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var sender = provider.GetRequiredService<ISender>();
+
+        // When
+        await sender.SendAsync(new GenDecoratedCqrsCommand(), default);
+
+        // Then
+        Assert.Equal(["CommandStart", "CommandHandled", "CommandEnd"], collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenGeneratedSender_WhenSendDecoratedCqrsQuery_ThenDecoratorRunsAroundHandler()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var sender = provider.GetRequiredService<ISender>();
+
+        // When
+        await sender.SendAsync(new GenDecoratedCqrsQuery(), default);
+
+        // Then
+        Assert.Equal(["QueryStart", "QueryEnd"], collector.LogCollection);
+    }
 }
 
 public sealed record GenSomeCommand : IRequest;
@@ -231,5 +317,76 @@ public sealed class StreamLoggingDecorator(LogCollector collector) : IStreamRequ
         await foreach (var item in next().WithCancellation(cancellationToken))
             yield return item;
         collector.LogCollection.Add("StreamEnd");
+    }
+}
+
+public sealed record GenCqrsCommand : ICommand;
+
+public sealed class GenCqrsCommandHandler(LogCollector collector) : ICommandHandler<GenCqrsCommand>
+{
+    public Task HandleAsync(GenCqrsCommand command, CancellationToken cancellationToken)
+    {
+        collector.LogCollection.Add("CommandHandled");
+        return Task.CompletedTask;
+    }
+}
+
+public sealed record GenCqrsCommandWithResponse : ICommand<GenSomeDto>;
+
+public sealed class GenCqrsCommandWithResponseHandler : ICommandHandler<GenCqrsCommandWithResponse, GenSomeDto>
+{
+    public Task<GenSomeDto> HandleAsync(GenCqrsCommandWithResponse command, CancellationToken cancellationToken)
+        => Task.FromResult(new GenSomeDto());
+}
+
+public sealed record GenCqrsQuery : IQuery<GenSomeDto>;
+
+public sealed class GenCqrsQueryHandler : IQueryHandler<GenCqrsQuery, GenSomeDto>
+{
+    public Task<GenSomeDto> HandleAsync(GenCqrsQuery query, CancellationToken cancellationToken)
+        => Task.FromResult(new GenSomeDto());
+}
+
+public sealed record GenDecoratedCqrsCommand : ICommand;
+
+[Decorate<CqrsLoggingDecorator>]
+public sealed class GenDecoratedCqrsCommandHandler(LogCollector collector) : ICommandHandler<GenDecoratedCqrsCommand>
+{
+    public Task HandleAsync(GenDecoratedCqrsCommand command, CancellationToken cancellationToken)
+    {
+        collector.LogCollection.Add("CommandHandled");
+        return Task.CompletedTask;
+    }
+}
+
+public sealed record GenDecoratedCqrsQuery : IQuery<GenSomeDto>;
+
+[Decorate<CqrsLoggingDecorator>]
+public sealed class GenDecoratedCqrsQueryHandler : IQueryHandler<GenDecoratedCqrsQuery, GenSomeDto>
+{
+    public Task<GenSomeDto> HandleAsync(GenDecoratedCqrsQuery query, CancellationToken cancellationToken)
+        => Task.FromResult(new GenSomeDto());
+}
+
+public sealed class CqrsLoggingDecorator(LogCollector collector)
+    : ICommandDecorator, IQueryDecorator
+{
+    public async Task HandleAsync<TCommand>(
+        TCommand command, RequestHandlerDelegate next, CancellationToken cancellationToken)
+        where TCommand : ICommand
+    {
+        collector.LogCollection.Add("CommandStart");
+        await next();
+        collector.LogCollection.Add("CommandEnd");
+    }
+
+    public async Task<TResponse> HandleAsync<TQuery, TResponse>(
+        TQuery query, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        where TQuery : IQuery<TResponse>
+    {
+        collector.LogCollection.Add("QueryStart");
+        var response = await next();
+        collector.LogCollection.Add("QueryEnd");
+        return response;
     }
 }
