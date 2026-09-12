@@ -1,4 +1,4 @@
-using Davish.Sendr;
+using Davish.Sendr.Implements;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 // ReSharper disable once CheckNamespace
@@ -14,14 +14,27 @@ public static class NotificationDependency
         /// <summary>
         /// Registers the <see cref="IPublisher"/> service so notifications can be published.
         /// Call this once during application startup, then register handlers with
-        /// <see cref="AddNotificationHandler{TNotification}"/>.
+        /// <see cref="AddNotificationHandler{TNotification}"/> — or pass
+        /// <c>o => o.UseGenerators()</c> (from the <c>Davish.Sendr.Generators</c> package) to
+        /// discover and register handlers at compile time instead.
         /// </summary>
+        /// <param name="configure">
+        /// An optional callback to configure Sendr.Notification, such as installing a generated
+        /// or custom publisher via <see cref="NotificationOptions.UsePublisher{TPublisher}"/>.
+        /// </param>
         /// <returns>The same <see cref="IServiceCollection"/> so that calls can be chained.</returns>
-        public IServiceCollection AddSendrNotification()
+        public IServiceCollection AddSendrNotification(Action<NotificationOptions>? configure = null)
         {
-            services.AddSingleton<NotificationHandlersRegistry>();
-            services.AddScoped<Publisher>();
-            services.AddScoped<IPublisher>(sp => sp.GetRequiredService<Publisher>());
+            var options = new NotificationOptions(services);
+            configure?.Invoke(options);
+
+            if (!options.HasCustomPublisher)
+            {
+                services.AddSingleton<NotificationHandlersRegistry>();
+                services.AddScoped<Publisher>();
+                services.AddScoped<IPublisher>(sp => sp.GetRequiredService<Publisher>());
+            }
+
             return services;
         }
 
@@ -96,7 +109,7 @@ public sealed class NotificationHandlerOptions<TNotification>
             foreach (var decoratorType in decorators)
             {
                 var decorator = (INotificationDecorator)sp.GetRequiredService(decoratorType);
-                handler = new NotificationDecoratorHandlerImpl<TNotification>(decorator, handler);
+                handler = new NotificationDecoratorHandler<TNotification>(decorator, handler);
             }
 
             return handler.HandleAsync(notification, cancellationToken);

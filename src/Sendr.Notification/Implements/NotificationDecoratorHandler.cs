@@ -1,11 +1,11 @@
-namespace Davish.Sendr;
+namespace Davish.Sendr.Implements;
 
 /// <summary>
 /// Bridges a non-generic <see cref="INotificationDecorator"/> back into the
 /// <see cref="INotificationHandler{TNotification}"/> chain so a handler entry's decorator
 /// pipeline can be composed at registration time.
 /// </summary>
-internal sealed class NotificationDecoratorHandlerImpl<TNotification>(
+internal sealed class NotificationDecoratorHandler<TNotification>(
     INotificationDecorator decorator,
     INotificationHandler<TNotification> inner)
     : INotificationHandler<TNotification>

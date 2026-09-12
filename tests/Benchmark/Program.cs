@@ -16,6 +16,7 @@ public class DispatchBenchmark
     private readonly SenderCall_Query _senderQuery = new();
     private readonly SenderCall_Command _senderCommand = new();
     private ISender _sender = null!;
+    private ISender _generatedSender = null!;
 
     [GlobalSetup]
     public void SetUp()
@@ -24,6 +25,11 @@ public class DispatchBenchmark
             .AddSendr()
             .AddRequestHandler<SenderCall_Query, SenderCall_QueryDto, SenderCall_QueryHandler>()
             .AddRequestHandler<SenderCall_Command, SenderCall_CommandHandler>()
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        _generatedSender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
     }
@@ -35,10 +41,16 @@ public class DispatchBenchmark
     public Task SenderCall_Query() => _sender.SendAsync(_senderQuery, default);
 
     [Benchmark]
+    public Task GeneratedSenderCall_Query() => _generatedSender.SendAsync(_senderQuery, default);
+
+    [Benchmark]
     public Task DirectCall_Command() => _directCommandHandler.HandleAsync(_directCommand, default);
 
     [Benchmark]
     public Task SenderCall_Command() => _sender.SendAsync(_senderCommand, default);
+
+    [Benchmark]
+    public Task GeneratedSenderCall_Command() => _generatedSender.SendAsync(_senderCommand, default);
 }
 
 [MemoryDiagnoser]
@@ -46,8 +58,13 @@ public class DecoratorBenchmark
 {
     private readonly SenderCall_Query _query = new();
     private readonly SenderCall_Command _command = new();
+    private readonly GenBench_OneDecoratorQuery _genOneDecoratorQuery = new();
+    private readonly GenBench_TwoDecoratorQuery _genTwoDecoratorQuery = new();
+    private readonly GenBench_OneDecoratorCommand _genOneDecoratorCommand = new();
+    private readonly GenBench_TwoDecoratorCommand _genTwoDecoratorCommand = new();
     private ISender _senderOneDecorator = null!;
     private ISender _senderTwoDecorators = null!;
+    private ISender _generatedSender = null!;
 
     [GlobalSetup]
     public void SetUp()
@@ -71,19 +88,38 @@ public class DecoratorBenchmark
                 .With<SenderCall_LoggingDecorator>())
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
+
+        // [Decorate<...>] bakes the decorator set into the handler class, so the generated
+        // one-/two-decorator comparison needs its own request/handler pairs (see below).
+        _generatedSender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
     }
 
     [Benchmark]
     public Task SenderCall_Query_OneDecorator() => _senderOneDecorator.SendAsync(_query, default);
 
     [Benchmark]
+    public Task GeneratedSenderCall_Query_OneDecorator() => _generatedSender.SendAsync(_genOneDecoratorQuery, default);
+
+    [Benchmark]
     public Task SenderCall_Query_TwoDecorators() => _senderTwoDecorators.SendAsync(_query, default);
+
+    [Benchmark]
+    public Task GeneratedSenderCall_Query_TwoDecorators() => _generatedSender.SendAsync(_genTwoDecoratorQuery, default);
 
     [Benchmark]
     public Task SenderCall_Command_OneDecorator() => _senderOneDecorator.SendAsync(_command, default);
 
     [Benchmark]
+    public Task GeneratedSenderCall_Command_OneDecorator() => _generatedSender.SendAsync(_genOneDecoratorCommand, default);
+
+    [Benchmark]
     public Task SenderCall_Command_TwoDecorators() => _senderTwoDecorators.SendAsync(_command, default);
+
+    [Benchmark]
+    public Task GeneratedSenderCall_Command_TwoDecorators() => _generatedSender.SendAsync(_genTwoDecoratorCommand, default);
 }
 
 [MemoryDiagnoser]
@@ -92,8 +128,10 @@ public class StreamBenchmark
     private readonly DirectCall_StreamQuery _directQuery = new();
     private readonly DirectCall_StreamHandler _directHandler = new();
     private readonly SenderCall_StreamQuery _senderQuery = new();
+    private readonly GenBench_StreamQuery _genDecoratedQuery = new();
     private IStreamSender _streamSender = null!;
     private IStreamSender _decoratedStreamSender = null!;
+    private IStreamSender _generatedStreamSender = null!;
 
     [GlobalSetup]
     public void SetUp()
@@ -108,6 +146,11 @@ public class StreamBenchmark
             .AddSendr()
             .AddStreamRequestHandler<SenderCall_StreamQuery, SenderCall_StreamDto, SenderCall_StreamHandler>(x =>
                 x.Decorator.With<SenderCall_StreamLoggingDecorator>())
+            .BuildServiceProvider()
+            .GetRequiredService<IStreamSender>();
+
+        _generatedStreamSender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
             .BuildServiceProvider()
             .GetRequiredService<IStreamSender>();
     }
@@ -127,6 +170,12 @@ public class StreamBenchmark
     }
 
     [Benchmark]
+    public IAsyncEnumerable<SenderCall_StreamDto> GeneratedSenderCall_Stream_Create()
+    {
+        return _generatedStreamSender.SendStream(_senderQuery, default);
+    }
+
+    [Benchmark]
     public async Task SenderCall_Stream_Enumerate()
     {
         await foreach (var _ in _streamSender.SendStream(_senderQuery, default))
@@ -135,9 +184,25 @@ public class StreamBenchmark
     }
 
     [Benchmark]
+    public async Task GeneratedSenderCall_Stream_Enumerate()
+    {
+        await foreach (var _ in _generatedStreamSender.SendStream(_senderQuery, default))
+        {
+        }
+    }
+
+    [Benchmark]
     public async Task SenderCall_Stream_OneDecorator_Enumerate()
     {
         await foreach (var _ in _decoratedStreamSender.SendStream(_senderQuery, default))
+        {
+        }
+    }
+
+    [Benchmark]
+    public async Task GeneratedSenderCall_Stream_OneDecorator_Enumerate()
+    {
+        await foreach (var _ in _generatedStreamSender.SendStream(_genDecoratedQuery, default))
         {
         }
     }
@@ -261,5 +326,59 @@ public sealed class SenderCall_StreamLoggingDecorator : IStreamRequestDecorator
     {
         await foreach (var response in next().WithCancellation(cancellationToken))
             yield return response;
+    }
+}
+
+// [Decorate<...>] bakes its decorator set into the handler class, so the generated-sender
+// decorator benchmarks need their own request/handler pairs (one per decorator count) rather
+// than reusing SenderCall_Query/SenderCall_Command with different registration-time configs.
+
+public sealed record GenBench_OneDecoratorQuery : IRequest<SenderCall_QueryDto>;
+
+[Decorate<SenderCall_LoggingDecorator>]
+public sealed class GenBench_OneDecoratorQueryHandler : IRequestHandler<GenBench_OneDecoratorQuery, SenderCall_QueryDto>
+{
+    public Task<SenderCall_QueryDto> HandleAsync(GenBench_OneDecoratorQuery request, CancellationToken cancellationToken) =>
+        Task.FromResult(new SenderCall_QueryDto());
+}
+
+public sealed record GenBench_TwoDecoratorQuery : IRequest<SenderCall_QueryDto>;
+
+[Decorate<SenderCall_TransactionDecorator, SenderCall_LoggingDecorator>]
+public sealed class GenBench_TwoDecoratorQueryHandler : IRequestHandler<GenBench_TwoDecoratorQuery, SenderCall_QueryDto>
+{
+    public Task<SenderCall_QueryDto> HandleAsync(GenBench_TwoDecoratorQuery request, CancellationToken cancellationToken) =>
+        Task.FromResult(new SenderCall_QueryDto());
+}
+
+public sealed record GenBench_OneDecoratorCommand : IRequest;
+
+[Decorate<SenderCall_LoggingDecorator>]
+public sealed class GenBench_OneDecoratorCommandHandler : IRequestHandler<GenBench_OneDecoratorCommand>
+{
+    public Task HandleAsync(GenBench_OneDecoratorCommand request, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+}
+
+public sealed record GenBench_TwoDecoratorCommand : IRequest;
+
+[Decorate<SenderCall_TransactionDecorator, SenderCall_LoggingDecorator>]
+public sealed class GenBench_TwoDecoratorCommandHandler : IRequestHandler<GenBench_TwoDecoratorCommand>
+{
+    public Task HandleAsync(GenBench_TwoDecoratorCommand request, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+}
+
+public sealed record GenBench_StreamQuery : IStreamRequest<SenderCall_StreamDto>;
+
+[Decorate<SenderCall_StreamLoggingDecorator>]
+public sealed class GenBench_StreamHandler : IStreamRequestHandler<GenBench_StreamQuery, SenderCall_StreamDto>
+{
+    public async IAsyncEnumerable<SenderCall_StreamDto> HandleAsync(
+        GenBench_StreamQuery request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return new SenderCall_StreamDto();
+        await Task.CompletedTask;
     }
 }

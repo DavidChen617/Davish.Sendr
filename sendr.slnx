@@ -1,15 +1,18 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Sendr.Abstractions/Sendr.Abstractions.csproj" />
+    <Project Path="src/Sendr.Shared/Sendr.Shared.csproj" />
     <Project Path="src/Sendr.Message/Sendr.Message.csproj" />
     <Project Path="src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj" />
     <Project Path="src/Sendr.Notification/Sendr.Notification.csproj" />
     <Project Path="src/Sendr/Sendr.csproj" />
+    <Project Path="src/Sendr.Generators/Sendr.Generators.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Benchmark/Benchmark.csproj" />
     <Project Path="tests/Message.Tests/Message.Tests.csproj" />
     <Project Path="tests/Notification.Tests/Notification.Tests.csproj" />
     <Project Path="tests/UnitTests/UnitTests.csproj" />
+    <Project Path="tests/Generator.Tests/Generator.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Davish.Sendr.Shared</AssemblyName>
+    <!-- Internal only: not published as its own NuGet package. Referencing projects that ARE
+         packed (Sendr.Abstractions, Sendr.Notification.Abstractions) bundle this assembly's
+         output directly into their own package instead of taking on a package dependency. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>
