@@ -197,6 +197,111 @@ public class GeneratorTests
         // Then
         Assert.Equal(["QueryStart", "QueryEnd"], collector.LogCollection);
     }
+
+    [Fact]
+    public void GivenServiceProvider_WhenResolveIPublisher_ThenGeneratedPublisherIsUsed()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddSendrNotification(o => o.UseGenerators())
+            .BuildServiceProvider();
+
+        // When
+        var publisher = provider.GetService<IPublisher>();
+
+        // Then
+        Assert.NotNull(publisher);
+        Assert.Equal("GeneratedPublisher", publisher!.GetType().Name);
+    }
+
+    [Fact]
+    public async Task GivenNoHandlersRegistered_WhenPublishUnrelatedNotification_ThenNoOp()
+    {
+        // Given
+        var publisher = new ServiceCollection()
+            .AddSendrNotification(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<IPublisher>();
+
+        // When / Then
+        await publisher.PublishAsync(new GenUnhandledNotification(), default);
+    }
+
+    [Fact]
+    public async Task GivenTwoHandlers_WhenPublishWithDefaultRunMode_ThenBothHandlersRun()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendrNotification(o => o.UseGenerators())
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+
+        // When
+        await publisher.PublishAsync(new GenSomeNotification(), default);
+
+        // Then
+        Assert.Equal(2, collector.LogCollection.Count);
+        Assert.Contains("FirstNotificationHandled", collector.LogCollection);
+        Assert.Contains("SecondNotificationHandled", collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenTwoHandlers_WhenPublishWithParallelRunMode_ThenBothHandlersRun()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel)))
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+
+        // When
+        await publisher.PublishAsync(new GenSomeNotification(), default);
+
+        // Then
+        Assert.Equal(2, collector.LogCollection.Count);
+        Assert.Contains("FirstNotificationHandled", collector.LogCollection);
+        Assert.Contains("SecondNotificationHandled", collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenDecoratedNotificationHandler_WhenPublish_ThenDecoratorRunsAroundHandler()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendrNotification(o => o.UseGenerators())
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+
+        // When
+        await publisher.PublishAsync(new GenDecoratedNotification(), default);
+
+        // Then
+        Assert.Equal(["NotificationStart", "NotificationHandled", "NotificationEnd"], collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenMultipleHandlersThrow_WhenPublish_ThenAllExceptionsAreAggregated()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel)))
+            .BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IPublisher>();
+
+        // When
+        var exception = await Assert.ThrowsAsync<AggregateException>(
+            () => publisher.PublishAsync(new GenThrowingNotification(), default));
+
+        // Then
+        Assert.Equal(2, exception.InnerExceptions.Count);
+    }
 }
 
 public sealed record GenSomeCommand : IRequest;
@@ -389,4 +494,64 @@ public sealed class CqrsLoggingDecorator(LogCollector collector)
         collector.LogCollection.Add("QueryEnd");
         return response;
     }
+}
+
+public sealed record GenUnhandledNotification : INotification;
+
+public sealed record GenSomeNotification : INotification;
+
+public sealed class FirstGenNotificationHandler(LogCollector collector) : INotificationHandler<GenSomeNotification>
+{
+    public Task HandleAsync(GenSomeNotification notification, CancellationToken cancellationToken)
+    {
+        collector.LogCollection.Add("FirstNotificationHandled");
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class SecondGenNotificationHandler(LogCollector collector) : INotificationHandler<GenSomeNotification>
+{
+    public Task HandleAsync(GenSomeNotification notification, CancellationToken cancellationToken)
+    {
+        collector.LogCollection.Add("SecondNotificationHandled");
+        return Task.CompletedTask;
+    }
+}
+
+public sealed record GenDecoratedNotification : INotification;
+
+[Decorate<NotificationLoggingDecorator>]
+public sealed class GenDecoratedNotificationHandler(LogCollector collector) : INotificationHandler<GenDecoratedNotification>
+{
+    public Task HandleAsync(GenDecoratedNotification notification, CancellationToken cancellationToken)
+    {
+        collector.LogCollection.Add("NotificationHandled");
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class NotificationLoggingDecorator(LogCollector collector) : INotificationDecorator
+{
+    public async Task HandleAsync<TNotification>(
+        TNotification notification, NotificationHandlerDelegate next, CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        collector.LogCollection.Add("NotificationStart");
+        await next();
+        collector.LogCollection.Add("NotificationEnd");
+    }
+}
+
+public sealed record GenThrowingNotification : INotification;
+
+public sealed class FirstThrowingGenNotificationHandler : INotificationHandler<GenThrowingNotification>
+{
+    public Task HandleAsync(GenThrowingNotification notification, CancellationToken cancellationToken)
+        => throw new InvalidOperationException("first");
+}
+
+public sealed class SecondThrowingGenNotificationHandler : INotificationHandler<GenThrowingNotification>
+{
+    public Task HandleAsync(GenThrowingNotification notification, CancellationToken cancellationToken)
+        => throw new InvalidOperationException("second");
 }

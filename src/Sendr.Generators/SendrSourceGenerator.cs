@@ -23,6 +23,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     private const string CommandHandlerMetadataName = "Davish.Sendr.ICommandHandler`1";
     private const string CommandResponseHandlerMetadataName = "Davish.Sendr.ICommandHandler`2";
     private const string QueryHandlerMetadataName = "Davish.Sendr.IQueryHandler`2";
+    private const string NotificationHandlerMetadataName = "Davish.Sendr.INotificationHandler`1";
     private const string DecorateAttributeNamespace = "Davish.Sendr";
     private const string DecorateAttributeName = "DecorateAttribute";
     private const string RequestDecoratorMetadataName = "Davish.Sendr.IRequestDecorator";
@@ -31,6 +32,16 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     private const string CommandDecoratorMetadataName = "Davish.Sendr.ICommandDecorator";
     private const string CommandDecoratorWithResponseMetadataName = "Davish.Sendr.ICommandDecorator+WithResponse";
     private const string QueryDecoratorMetadataName = "Davish.Sendr.IQueryDecorator";
+    private const string NotificationDecoratorMetadataName = "Davish.Sendr.INotificationDecorator";
+
+    // Davish.Sendr.Notification.* (IPublisher, NotificationRunMode, NotificationGroupRunner,
+    // NotificationOptions) live in the separate Sendr.Notification package, not
+    // Sendr.Notification.Abstractions. A consumer can implement INotificationHandler<T> (from
+    // Abstractions) without referencing Sendr.Notification proper, so IPublisher's presence is
+    // the actual signal that emitting GeneratedPublisher/NotificationOptionsGeneratedExtensions
+    // is safe — using INotificationHandler`1's presence instead could emit code that fails to
+    // compile in a project that only has Abstractions.
+    private const string PublisherMetadataName = "Davish.Sendr.IPublisher";
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -42,7 +53,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             .SelectMany(static (r, _) => r)
             .Collect();
 
-        context.RegisterSourceOutput(results, static (spc, results) => Emit(spc, results));
+        var hasNotificationSupport = context.CompilationProvider
+            .Select(static (compilation, _) => compilation.GetTypeByMetadataName(PublisherMetadataName) is not null);
+
+        var combined = results.Combine(hasNotificationSupport);
+
+        context.RegisterSourceOutput(combined, static (spc, combined) => Emit(spc, combined.Left, combined.Right));
     }
 
     private readonly record struct AnalysisResult(HandlerModel? Model, ImmutableArray<Diagnostic> Diagnostics);
@@ -64,9 +80,11 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         var commandHandler1 = compilation.GetTypeByMetadataName(CommandHandlerMetadataName);
         var commandHandler2 = compilation.GetTypeByMetadataName(CommandResponseHandlerMetadataName);
         var queryHandler2 = compilation.GetTypeByMetadataName(QueryHandlerMetadataName);
+        var notificationHandler1 = compilation.GetTypeByMetadataName(NotificationHandlerMetadataName);
 
         if (requestHandler1 is null && requestHandler2 is null && streamHandler2 is null &&
-            commandHandler1 is null && commandHandler2 is null && queryHandler2 is null)
+            commandHandler1 is null && commandHandler2 is null && queryHandler2 is null &&
+            notificationHandler1 is null)
             return ImmutableArray<AnalysisResult>.Empty;
 
         var results = ImmutableArray.CreateBuilder<AnalysisResult>();
@@ -88,6 +106,8 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
                 kind = HandlerKind.Command;
             else if (queryHandler2 is not null && SymbolEqualityComparer.Default.Equals(original, queryHandler2))
                 kind = HandlerKind.Query;
+            else if (notificationHandler1 is not null && SymbolEqualityComparer.Default.Equals(original, notificationHandler1))
+                kind = HandlerKind.Notification;
             else
                 continue;
 
@@ -114,7 +134,9 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
 
         var typeArgs = interfaceSymbol.TypeArguments;
         var requestType = ToGlobalName(typeArgs[0]);
-        var responseType = kind is HandlerKind.Request or HandlerKind.Command ? null : ToGlobalName(typeArgs[1]);
+        var responseType = kind is HandlerKind.Request or HandlerKind.Command or HandlerKind.Notification
+            ? null
+            : ToGlobalName(typeArgs[1]);
 
         var (requiredMetadataName, requiredDisplayName) = kind switch
         {
@@ -124,6 +146,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             HandlerKind.Command => (CommandDecoratorMetadataName, "Davish.Sendr.ICommandDecorator"),
             HandlerKind.CommandResponse => (CommandDecoratorWithResponseMetadataName, "Davish.Sendr.ICommandDecorator.WithResponse"),
             HandlerKind.Query => (QueryDecoratorMetadataName, "Davish.Sendr.IQueryDecorator"),
+            HandlerKind.Notification => (NotificationDecoratorMetadataName, "Davish.Sendr.INotificationDecorator"),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
@@ -205,12 +228,15 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         return (decorators.ToImmutable(), diagnostics.ToImmutable());
     }
 
-    private static void Emit(SourceProductionContext spc, ImmutableArray<AnalysisResult> results)
+    private static void Emit(SourceProductionContext spc, ImmutableArray<AnalysisResult> results, bool hasNotificationSupport)
     {
         foreach (var result in results)
             foreach (var diagnostic in result.Diagnostics)
                 spc.ReportDiagnostic(diagnostic);
 
+        // Every other handler kind allows exactly one handler per request type — a second one is
+        // ambiguous (SENDR002). Notification handlers are the opposite: any number of classes may
+        // handle the same notification type, so they skip this dedup entirely and are all kept.
         var seen = new System.Collections.Generic.Dictionary<(HandlerKind, string), HandlerModel>();
         var deduped = ImmutableArray.CreateBuilder<HandlerModel>();
 
@@ -218,6 +244,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         {
             if (result.Model is not { } model)
                 continue;
+
+            if (model.Kind == HandlerKind.Notification)
+            {
+                deduped.Add(model);
+                continue;
+            }
 
             var key = (model.Kind, model.RequestType);
             if (seen.TryGetValue(key, out var existing))
@@ -233,7 +265,14 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             deduped.Add(model);
         }
 
-        var source = SourceBuilder.Build(deduped.ToImmutable());
+        // Without Sendr.Notification referenced (IPublisher unresolvable), there is nothing valid
+        // to emit for any discovered notification handler — GeneratedPublisher itself couldn't
+        // compile — so they're dropped rather than passed to SourceBuilder.
+        var models = hasNotificationSupport
+            ? deduped.ToImmutable()
+            : deduped.Where(m => m.Kind != HandlerKind.Notification).ToImmutableArray();
+
+        var source = SourceBuilder.Build(models, hasNotificationSupport);
         spc.AddSource("Sendr.Generated.g.cs", SourceText.From(source, Encoding.UTF8));
     }
 

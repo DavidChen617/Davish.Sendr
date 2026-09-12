@@ -10,6 +10,7 @@ internal enum HandlerKind
     Command,
     CommandResponse,
     Query,
+    Notification,
 }
 
 /// <summary>
