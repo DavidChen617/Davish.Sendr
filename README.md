@@ -215,7 +215,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 
 ```xml
 <PackageReference Include="Davish.Sendr" Version="3.1.2" />
-<PackageReference Include="Davish.Sendr.Generators" Version="1.1.2" PrivateAssets="all" />
+<PackageReference Include="Davish.Sendr.Generators" Version="1.1.3" PrivateAssets="all" />
 ```
 
 ```csharp
@@ -237,7 +237,8 @@ Notes:
 - This is purely additive — `AddSendr()` without `UseGenerators()` keeps registering the default reflection-based sender unchanged.
 - `o.UseGenerators()` and manual `AddRequestHandler`/`AddStreamRequestHandler` calls don't mix for the *same* request type: once `UseGenerators()` installs the generated sender, dispatch only knows about handlers discovered at compile time. Use `SendrOptions.UseSender<TSender>()` directly if you ever need to plug in your own sender implementation the same way.
 - `[Decorate<...>]` comes in arities 1 through 8; apply at most one per handler class.
-- Handler classes, records, and structs are all discovered — not just `class`.
+- Handler classes and records are both discovered — not just `class`.
+- A handler declared as `struct`/`record struct` is a compile error (`SENDR004`), since handler resolution (generated or manual) requires a reference type; use `class`/`record class` instead.
 - Generic (open) handler classes aren't discovered — register those manually with `AddRequestHandler`/`AddStreamRequestHandler` (without `UseGenerators()`).
 - A duplicate handler for the same request/response pair is a compile error (`SENDR002`), not a silent pick. A request type implementing `IRequest<TResponse>` (or `ICommand<TResponse>`/`IQuery<TResponse>`/`IStreamRequest<TResponse>`) for more than one `TResponse` is not a duplicate — each `TResponse` gets its own handler slot.
 - `ICommandHandler`/`IQueryHandler` are discovered the same way — `[Decorate<...>]` on a command/query handler validates against `ICommandDecorator`/`IQueryDecorator` instead.

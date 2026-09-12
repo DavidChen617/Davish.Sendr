@@ -48,10 +48,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     {
         var results = context.SyntaxProvider
             .CreateSyntaxProvider(
-                // TypeDeclarationSyntax (not ClassDeclarationSyntax) so record/record struct/struct
-                // handler declarations are discovered too — a record handler is a distinct syntax
-                // node kind in Roslyn and was previously invisible to this predicate entirely, with
-                // no diagnostic at all (unlike an open generic handler, which gets SENDR003).
+                // TypeDeclarationSyntax (not ClassDeclarationSyntax) so a record handler — a
+                // distinct syntax node kind in Roslyn — is discovered instead of being invisible
+                // to this predicate with no diagnostic at all (unlike an open generic handler,
+                // which gets SENDR003). This also lets struct/record struct declarations reach
+                // BuildModel, where they're rejected with SENDR004 (handler registration requires
+                // a reference type) instead of silently producing codegen that fails to compile.
                 predicate: static (node, _) => node is TypeDeclarationSyntax { BaseList.Types.Count: > 0 },
                 transform: static (ctx, ct) => Analyze(ctx, ct))
             .SelectMany(static (r, _) => r)
@@ -127,6 +129,15 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         HandlerKind kind,
         Compilation compilation)
     {
+        if (classSymbol.IsValueType)
+        {
+            var diagnostic = Diagnostic.Create(
+                DiagnosticDescriptors.ValueTypeHandlerNotSupported,
+                classSymbol.Locations.FirstOrDefault(),
+                classSymbol.ToDisplayString());
+            return new AnalysisResult(null, [diagnostic]);
+        }
+
         if (classSymbol.TypeParameters.Length > 0)
         {
             var diagnostic = Diagnostic.Create(
