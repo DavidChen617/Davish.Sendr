@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Sendr.Shared\Sendr.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="[10.0.0, )" />
   </ItemGroup>
 

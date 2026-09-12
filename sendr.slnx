@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Sendr.Abstractions/Sendr.Abstractions.csproj" />
+    <Project Path="src/Sendr.Shared/Sendr.Shared.csproj" />
     <Project Path="src/Sendr.Message/Sendr.Message.csproj" />
     <Project Path="src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj" />
     <Project Path="src/Sendr.Notification/Sendr.Notification.csproj" />

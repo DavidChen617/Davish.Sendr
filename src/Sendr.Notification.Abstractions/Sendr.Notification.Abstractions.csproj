@@ -7,4 +7,8 @@
     <Description>Abstractions (contracts) for Davish.Sendr.Notification — INotification, INotificationHandler, INotificationDecorator, IPublisher.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Sendr.Shared\Sendr.Shared.csproj" />
+  </ItemGroup>
+
 </Project>
