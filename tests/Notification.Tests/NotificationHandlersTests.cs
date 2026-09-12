@@ -361,6 +361,25 @@ public class NotificationHandlersTests
     }
 
     [Fact]
+    public void GivenReentrantNotificationRegistration_WhenConfigureRegistersSameNotificationAgain_ThenThrows()
+    {
+        // Given
+        var services = new ServiceCollection().AddSendrNotification();
+
+        // When / Then
+        // The reentrant inner call happens entirely inside the outer call's configure callback,
+        // before the outer call has registered anything — a naive "check once, up front" guard
+        // would let both calls pass, silently letting one registration shadow the other.
+        Assert.Throws<InvalidOperationException>(() =>
+            services.AddNotificationHandler<SomeNotification>(outer =>
+            {
+                services.AddNotificationHandler<SomeNotification>(inner =>
+                    inner.Handler.Sequence.With<FirstNotificationHandler>());
+                outer.Handler.Sequence.With<SecondNotificationHandler>();
+            }));
+    }
+
+    [Fact]
     public async Task GivenIPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
     {
         // Given

@@ -54,13 +54,21 @@ public static class NotificationDependency
             Action<NotificationHandlerOptions<TNotification>> configure)
             where TNotification : INotification
         {
+            var options = new NotificationHandlerOptions<TNotification>();
+            configure(options);
+
+            // Checked here, after configure runs, not before: configure can itself reentrantly
+            // call AddNotificationHandler<TNotification> again (e.g. from a shared setup helper
+            // invoked from more than one place). Checking only up front lets such a nested call
+            // pass the same "nothing registered yet" check the outer call already passed, so
+            // both proceed and one registration silently shadows the other. Checking again here,
+            // immediately before actually registering, means whichever call's registration
+            // reaches this point first wins and any other one throws — instead of the outer call
+            // finishing last and silently overwriting the inner one's handlers.
             if (services.Any(d => d.ServiceType == typeof(NotificationHandlers<TNotification>)))
                 throw new InvalidOperationException(
                     $"Notification handlers for '{typeof(TNotification)}' are already registered. " +
                     $"Register every handler for a notification in a single AddNotificationHandler<{typeof(TNotification).Name}> call.");
-
-            var options = new NotificationHandlerOptions<TNotification>();
-            configure(options);
 
             foreach (var handlerType in options.HandlerTypes)
                 services.TryAddTransient(handlerType);
