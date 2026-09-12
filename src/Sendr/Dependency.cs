@@ -14,15 +14,28 @@ public static class Dependency
         /// <summary>
         /// Registers the <see cref="ISender"/> service so requests can be dispatched.
         /// Call this once during application startup, then register handlers with
-        /// <see cref="AddRequestHandler{TRequest, TResponse, THandler}"/>.
+        /// <see cref="AddRequestHandler{TRequest, TResponse, THandler}"/> — or pass
+        /// <c>o => o.UseGenerators()</c> (from the <c>Davish.Sendr.Generators</c> package) to
+        /// discover and register handlers at compile time instead.
         /// </summary>
+        /// <param name="configure">
+        /// An optional callback to configure Sendr, such as installing a generated or custom
+        /// sender via <see cref="SendrOptions.UseSender{TSender}"/>.
+        /// </param>
         /// <returns>The same <see cref="IServiceCollection"/> so that calls can be chained.</returns>
-        public IServiceCollection AddSendr()
+        public IServiceCollection AddSendr(Action<SendrOptions>? configure = null)
         {
-            services.AddSingleton<HandlerRegistry>();
-            services.AddScoped<Sender>();
-            services.AddScoped<ISender>(sp => sp.GetRequiredService<Sender>());
-            services.AddScoped<IStreamSender>(sp => sp.GetRequiredService<Sender>());
+            var options = new SendrOptions(services);
+            configure?.Invoke(options);
+
+            if (!options.HasCustomSender)
+            {
+                services.AddSingleton<HandlerRegistry>();
+                services.AddScoped<Sender>();
+                services.AddScoped<ISender>(sp => sp.GetRequiredService<Sender>());
+                services.AddScoped<IStreamSender>(sp => sp.GetRequiredService<Sender>());
+            }
+
             return services;
         }
 

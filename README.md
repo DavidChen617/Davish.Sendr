@@ -21,6 +21,7 @@ Sendr keeps the ergonomics you expect from a mediator — send a request, let a 
 - **Notification fan-out** — `INotification` published to any number of handlers, arranged into an ordered **Sequence** group and a concurrent **Parallel** group.
 - **Non-generic decorators** — a single decorator type wraps *any* compatible request, stream, or notification handler; no per-type boilerplate.
 - **Explicit registration** — every handler is registered by hand. No reflection-based assembly scanning, no surprises at startup.
+- **Optional source-generated dispatch** — `Davish.Sendr.Generators` discovers handlers at compile time and installs a reflection-free `ISender`/`IStreamSender`; opt in with `AddSendr(o => o.UseGenerators())`.
 - **Multi-target** — builds for `netstandard2.0` and `net10.0`.
 - **Split packages** — depend only on the abstractions package from your domain layer; request/response and notification each ship as their own pair of packages, with an optional CQRS-flavored package on top.
 
@@ -50,6 +51,12 @@ If you want the CQRS naming (`ICommand`, `IQuery`, …) instead of the plain `IR
 
 ```bash
 dotnet add package Davish.Sendr.Message
+```
+
+Compile-time handler discovery and dispatch (opt-in — see [Source-generated registration](#source-generated-registration-opt-in)):
+
+```bash
+dotnet add package Davish.Sendr.Generators
 ```
 
 ## Getting started
@@ -185,6 +192,38 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
     }
 }
 ```
+
+## Source-generated registration (opt-in)
+
+`Davish.Sendr.Generators` discovers your `IRequestHandler`/`IStreamRequestHandler` implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr` and replaces every manual `AddRequestHandler`/`AddStreamRequestHandler` call, backed by a reflection-free `ISender`/`IStreamSender` — dispatch is a compile-time-built `Dictionary<Type, Func<...>>` lookup, not `MakeGenericType` + compiled expression trees.
+
+```xml
+<PackageReference Include="Davish.Sendr" Version="3.0.0" />
+<PackageReference Include="Davish.Sendr.Generators" Version="1.0.0" PrivateAssets="all" />
+```
+
+```csharp
+builder.Services.AddSendr(o => o.UseGenerators());
+```
+
+Decorators are declared on the handler with `[Decorate<...>]` instead of a fluent `configure` callback. Type arguments run outer to inner — the first one runs first, matching `x.Decorator.With<T>()` ordering:
+
+```csharp
+[Decorate<TransactionDecorator, LoggingDecorator>]
+public sealed class GetOrderHandler : IRequestHandler<GetOrder, OrderDto>
+{
+    public Task<OrderDto> HandleAsync(GetOrder request, CancellationToken cancellationToken) { /* ... */ }
+}
+```
+
+Notes:
+
+- This is purely additive — `AddSendr()` without `UseGenerators()` keeps registering the default reflection-based sender unchanged.
+- `o.UseGenerators()` and manual `AddRequestHandler`/`AddStreamRequestHandler` calls don't mix for the *same* request type: once `UseGenerators()` installs the generated sender, dispatch only knows about handlers discovered at compile time. Use `SendrOptions.UseSender<TSender>()` directly if you ever need to plug in your own sender implementation the same way.
+- `[Decorate<...>]` comes in arities 1 through 8; apply at most one per handler class.
+- Generic (open) handler classes aren't discovered — register those manually with `AddRequestHandler`/`AddStreamRequestHandler` (without `UseGenerators()`).
+- A duplicate handler for the same request type is a compile error (`SENDR002`), not a silent pick.
+- `INotificationHandler` (the `Davish.Sendr.Notification` package) isn't covered — sequence/parallel grouping is a per-app decision the generator doesn't infer.
 
 ## Streams
 
