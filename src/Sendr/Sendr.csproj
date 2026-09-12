@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Davish.Sendr</PackageId>
     <AssemblyName>Davish.Sendr</AssemblyName>
-    <Version>3.2.1</Version>
+    <Version>3.2.2</Version>
     <Description>A free, lightweight mediator for .NET — request/response dispatching with a decorator pipeline.</Description>
   </PropertyGroup>
 

@@ -70,7 +70,7 @@ builder.Services
 ```
 
 > [!NOTE]
-> Only one handler may be registered per request/response pair — a second `AddRequestHandler`/`AddCommandHandler`/`AddQueryHandler`/`AddStreamRequestHandler` call for the same type and response throws `InvalidOperationException` instead of silently replacing the first. Calling `SendAsync`/`SendStream` for a type with no handler registered throws `InvalidOperationException` naming the registration call that's missing, rather than a bare DI "no service registered" message.
+> Only one handler may be registered per request/response pair — a second `AddRequestHandler`/`AddCommandHandler`/`AddQueryHandler`/`AddStreamRequestHandler` call for the same type and response throws `InvalidOperationException` instead of silently replacing the first. Calling `SendAsync`/`SendStream` for a type with no handler registered throws `InvalidOperationException` naming the registration call that's missing, rather than a bare DI "no service registered" message. Each registration is frozen at the point it's made — the `configure` callback's parameter isn't meant to be kept and mutated afterward; doing so has no effect on a provider already built from it.
 
 ## Requests
 
@@ -214,7 +214,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 `Davish.Sendr.Generators` discovers your `IRequestHandler`/`IStreamRequestHandler` implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr` and replaces every manual `AddRequestHandler`/`AddStreamRequestHandler` call, backed by a reflection-free `ISender`/`IStreamSender` — dispatch is a compile-time-built `Dictionary<Type, Func<...>>` lookup, not `MakeGenericType` + compiled expression trees.
 
 ```xml
-<PackageReference Include="Davish.Sendr" Version="3.2.1" />
+<PackageReference Include="Davish.Sendr" Version="3.2.2" />
 <PackageReference Include="Davish.Sendr.Generators" Version="1.1.5" PrivateAssets="all" />
 ```
 
@@ -378,7 +378,7 @@ public sealed class LoggingNotificationDecorator(ILogger<LoggingNotificationDeco
 > Both groups run every handler regardless of earlier failures — Sequence doesn't stop at the first throw, it just runs one handler at a time instead of concurrently. Every exception is collected: zero stay silent, exactly one is rethrown as itself (preserving its original stack trace), and two or more are combined into one `AggregateException` from `PublishAsync`. Handlers don't get an isolated DI scope either, so avoid sharing a non-thread-safe scoped service (such as a `DbContext`) across Parallel entries.
 
 > [!NOTE]
-> `AddNotificationHandler<TNotification>` can only be called once per notification type — it throws on a second call, since the Sequence's order is only meaningful when every handler for that notification is declared together.
+> `AddNotificationHandler<TNotification>` can only be called once per notification type — it throws on a second call, since the Sequence's order is only meaningful when every handler for that notification is declared together. The registration is frozen at the point it's made — the `configure` callback's parameter isn't meant to be kept and mutated afterward; doing so has no effect on a provider already built from it.
 
 ## Notification: source-generated registration (opt-in)
 
