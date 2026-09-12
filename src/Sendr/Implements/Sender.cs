@@ -29,9 +29,25 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
-        return ((StreamRequestHandler<TResponse>)
-                registry.GetOrCreateStream(request.GetType(), typeof(TResponse)))
-            .HandleAsync(request, sp, cancellationToken);
+        return SendStreamCore(request, cancellationToken);
+    }
+
+    // Everything past the null check — resolving the registered handler and decorators via DI,
+    // and running any of a decorator's own eager (non-yield) body before its `next()` call — is
+    // deferred until enumeration actually starts, matching the documented "handling begins when
+    // enumeration starts" contract. That requires this to be a real async-iterator method itself
+    // (not a plain method that calls one and returns its result): only the compiler-generated
+    // state machine behind `yield`/`await foreach` guarantees none of the body below runs before
+    // the caller's first MoveNextAsync().
+    private async IAsyncEnumerable<TResponse> SendStreamCore<TResponse>(
+        IStreamRequest<TResponse> request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var handler = (StreamRequestHandler<TResponse>)
+            registry.GetOrCreateStream(request.GetType(), typeof(TResponse));
+
+        await foreach (var item in handler.HandleAsync(request, sp, cancellationToken).WithCancellation(cancellationToken))
+            yield return item;
     }
 
     public Task SendAsync(ICommand command, CancellationToken cancellationToken)

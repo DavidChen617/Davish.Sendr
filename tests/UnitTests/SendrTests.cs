@@ -258,6 +258,82 @@ public class SendrTests
         Assert.Equal(1, intResult);
         Assert.Equal("hello", stringResult);
     }
+
+    [Fact]
+    public void GivenStreamRequest_WhenSendStreamNotYetEnumerated_ThenHandlerAndDecoratorNotResolved()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr()
+            .AddStreamRequestHandler<SomeStreamQuery, int, SomeStreamQueryHandler>(x =>
+                x.Decorator.With<StreamLoggingDecorator>())
+            .BuildServiceProvider();
+        var collector = provider.GetService<LogCollector>()!;
+        var streamSender = provider.GetService<IStreamSender>()!;
+
+        // When
+        _ = streamSender.SendStream(new SomeStreamQuery(), default);
+
+        // Then
+        Assert.Empty(collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenStreamRequest_WhenEnumerated_ThenHandlerAndDecoratorRunInOrder()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr()
+            .AddStreamRequestHandler<SomeStreamQuery, int, SomeStreamQueryHandler>(x =>
+                x.Decorator.With<StreamLoggingDecorator>())
+            .BuildServiceProvider();
+        var collector = provider.GetService<LogCollector>()!;
+        var streamSender = provider.GetService<IStreamSender>()!;
+
+        // When
+        var items = new List<int>();
+        await foreach (var item in streamSender.SendStream(new SomeStreamQuery(), default))
+            items.Add(item);
+
+        // Then
+        Assert.Equal([1, 2], items);
+        Assert.Equal(["StreamStart", "StreamEnd"], collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenDisposableTransientHandler_WhenScopeEnds_ThenDisposedExactlyOnce()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, DisposableCommandHandler>()
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await sender.SendAsync(new SomeCommand(), default);
+            Assert.Equal(1, DisposableCommandHandler.ConstructedCount);
+        }
+
+        // Then
+        Assert.Equal(1, DisposableCommandHandler.DisposedCount);
+    }
+}
+
+public sealed class DisposableCommandHandler : IRequestHandler<SomeCommand>, IDisposable
+{
+    public static int ConstructedCount;
+    public static int DisposedCount;
+
+    public DisposableCommandHandler() => ConstructedCount++;
+
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public void Dispose() => DisposedCount++;
 }
 
 public sealed class SecondSomeCommandHandler : IRequestHandler<SomeCommand>
@@ -350,5 +426,34 @@ public sealed class TransactionDecorator(LogCollector collector)
         collector.LogCollection.Add("BeginTransaction");
         await next();
         collector.LogCollection.Add("Commit");
+    }
+}
+
+public sealed record SomeStreamQuery : IStreamRequest<int>;
+
+public sealed class SomeStreamQueryHandler : IStreamRequestHandler<SomeStreamQuery, int>
+{
+    public async IAsyncEnumerable<int> HandleAsync(
+        SomeStreamQuery request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        yield return 1;
+        yield return 2;
+    }
+}
+
+public sealed class StreamLoggingDecorator(LogCollector collector) : IStreamRequestDecorator
+{
+    public async IAsyncEnumerable<TResponse> HandleAsync<TRequest, TResponse>(
+        TRequest request,
+        StreamHandlerDelegate<TResponse> next,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        where TRequest : IStreamRequest<TResponse>
+    {
+        collector.LogCollection.Add("StreamStart");
+        await foreach (var item in next().WithCancellation(cancellationToken))
+            yield return item;
+        collector.LogCollection.Add("StreamEnd");
     }
 }

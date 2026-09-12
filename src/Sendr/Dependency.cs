@@ -61,8 +61,6 @@ public static class Dependency
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per request type; remove the duplicate AddRequestHandler call.");
 
-            services.AddTransient<THandler>();
-
             var options = new RequestHandlerOptions<TRequest, TResponse>();
             configure?.Invoke(options);
 
@@ -71,7 +69,11 @@ public static class Dependency
 
             services.AddTransient<IRequestHandler<TRequest, TResponse>>(pv =>
             {
-                IRequestHandler<TRequest, TResponse> handler = pv.GetRequiredService<THandler>();
+                // Constructed here (not resolved via a separate services.AddTransient<THandler>()
+                // registration) so a disposable handler is captured for disposal exactly once by
+                // this factory's own resolution, not twice — once here and once more from a
+                // redundant standalone THandler registration.
+                IRequestHandler<TRequest, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
                 foreach (var decoratorType in options.Decorators)
                 {
@@ -106,8 +108,6 @@ public static class Dependency
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per request type; remove the duplicate AddRequestHandler call.");
 
-            services.AddTransient<THandler>();
-
             var options = new RequestHandlerOptions<TRequest>();
             configure?.Invoke(options);
 
@@ -116,7 +116,9 @@ public static class Dependency
 
             services.AddTransient<IRequestHandler<TRequest>>(pv =>
             {
-                IRequestHandler<TRequest> handler = pv.GetRequiredService<THandler>();
+                // See AddRequestHandler<TRequest, TResponse, THandler> for why this constructs
+                // THandler directly instead of resolving it via its own registration.
+                IRequestHandler<TRequest> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
                 foreach (var decoratorType in options.Decorators)
                 {
@@ -152,8 +154,6 @@ public static class Dependency
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per stream request type; remove the duplicate AddStreamRequestHandler call.");
 
-            services.AddTransient<THandler>();
-
             var options = new StreamRequestHandlerOptions<TRequest, TResponse>();
             configure?.Invoke(options);
 
@@ -162,7 +162,9 @@ public static class Dependency
 
             services.AddTransient<IStreamRequestHandler<TRequest, TResponse>>(pv =>
             {
-                IStreamRequestHandler<TRequest, TResponse> handler = pv.GetRequiredService<THandler>();
+                // See AddRequestHandler<TRequest, TResponse, THandler> for why this constructs
+                // THandler directly instead of resolving it via its own registration.
+                IStreamRequestHandler<TRequest, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
                 foreach (var decoratorType in options.Decorators)
                 {
@@ -197,8 +199,6 @@ public static class Dependency
                     $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
                     $"may be registered per command type; remove the duplicate AddCommandHandler call.");
 
-            services.AddTransient<THandler>();
-
             var options = new CommandHandlerOptions<TCommand>();
             configure?.Invoke(options);
 
@@ -207,7 +207,9 @@ public static class Dependency
 
             services.AddTransient<ICommandHandler<TCommand>>(pv =>
             {
-                ICommandHandler<TCommand> handler = pv.GetRequiredService<THandler>();
+                // See AddRequestHandler<TRequest, TResponse, THandler> for why this constructs
+                // THandler directly instead of resolving it via its own registration.
+                ICommandHandler<TCommand> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
                 foreach (var decoratorType in options.Decorators)
                 {
@@ -243,8 +245,6 @@ public static class Dependency
                     $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
                     $"may be registered per command type; remove the duplicate AddCommandHandler call.");
 
-            services.AddTransient<THandler>();
-
             var options = new CommandHandlerOptions<TCommand, TResponse>();
             configure?.Invoke(options);
 
@@ -253,7 +253,9 @@ public static class Dependency
 
             services.AddTransient<ICommandHandler<TCommand, TResponse>>(pv =>
             {
-                ICommandHandler<TCommand, TResponse> handler = pv.GetRequiredService<THandler>();
+                // See AddRequestHandler<TRequest, TResponse, THandler> for why this constructs
+                // THandler directly instead of resolving it via its own registration.
+                ICommandHandler<TCommand, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
                 foreach (var decoratorType in options.Decorators)
                 {
@@ -289,8 +291,6 @@ public static class Dependency
                     $"A handler for '{typeof(TQuery)}' is already registered. Only one handler " +
                     $"may be registered per query type; remove the duplicate AddQueryHandler call.");
 
-            services.AddTransient<THandler>();
-
             var options = new QueryHandlerOptions<TQuery, TResponse>();
             configure?.Invoke(options);
 
@@ -299,7 +299,9 @@ public static class Dependency
 
             services.AddTransient<IQueryHandler<TQuery, TResponse>>(pv =>
             {
-                IQueryHandler<TQuery, TResponse> handler = pv.GetRequiredService<THandler>();
+                // See AddRequestHandler<TRequest, TResponse, THandler> for why this constructs
+                // THandler directly instead of resolving it via its own registration.
+                IQueryHandler<TQuery, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
                 foreach (var decoratorType in options.Decorators)
                 {

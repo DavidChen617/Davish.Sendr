@@ -113,6 +113,24 @@ public class GeneratorTests
     }
 
     [Fact]
+    public void GivenGeneratedStreamSender_WhenSendStreamNotYetEnumerated_ThenHandlerAndDecoratorNotResolved()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var streamSender = provider.GetRequiredService<IStreamSender>();
+
+        // When
+        _ = streamSender.SendStream(new GenStreamQuery(), default);
+
+        // Then
+        Assert.Empty(collector.LogCollection);
+    }
+
+    [Fact]
     public async Task GivenGeneratedSender_WhenSendCqrsCommand_ThenHandled()
     {
         // Given

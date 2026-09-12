@@ -232,11 +232,26 @@ internal static class SourceBuilder
         sb.AppendLine("            if (request is null)");
         sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
         sb.AppendLine();
-        sb.AppendLine("            if (_streamHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
-        sb.AppendLine("                return (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine("            return SendStreamCore<TResponse>(request, cancellationToken);");
+        sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}> is registered.\");");
+        // Everything past the null check — the dictionary lookup, the registered handler and
+        // decorator's construction via DI, and any of a decorator's own eager (non-yield) body
+        // before its next() call — is deferred until enumeration actually starts, matching the
+        // documented "handling begins when enumeration starts" contract. Only a real
+        // async-iterator method's compiler-generated state machine (yield/await foreach)
+        // guarantees none of this runs before the caller's first MoveNextAsync().
+        sb.AppendLine("        private async global::System.Collections.Generic.IAsyncEnumerable<TResponse> SendStreamCore<TResponse>(");
+        sb.AppendLine("            global::Davish.Sendr.IStreamRequest<TResponse> request,");
+        sb.AppendLine("            [global::System.Runtime.CompilerServices.EnumeratorCancellation] global::System.Threading.CancellationToken cancellationToken)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (!_streamHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
+        sb.AppendLine("                throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                    $\"Davish.Sendr: no IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine();
+        sb.AppendLine("            var inner = (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine("            await foreach (var item in inner.WithCancellation(cancellationToken))");
+        sb.AppendLine("                yield return item;");
         sb.AppendLine("        }");
     }
 
