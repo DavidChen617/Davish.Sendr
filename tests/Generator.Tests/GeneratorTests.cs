@@ -286,6 +286,36 @@ public class GeneratorTests
     }
 
     [Fact]
+    public async Task GivenGeneratedSender_WhenSendNullQuery_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => sender.SendAsync((GenCqrsQuery)null!, default));
+        Assert.Equal("query", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task GivenGeneratedPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var publisher = new ServiceCollection()
+            .AddSendrNotification(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<IPublisher>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => publisher.PublishAsync(null!, default));
+        Assert.Equal("notification", exception.ParamName);
+    }
+
+    [Fact]
     public async Task GivenMultipleHandlersThrow_WhenPublish_ThenAllExceptionsAreAggregated()
     {
         // Given

@@ -145,6 +145,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IRequest request,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (request is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
+        sb.AppendLine();
         sb.AppendLine("            if (_requestHandlers.TryGetValue(request.GetType(), out var handler))");
         sb.AppendLine("                return handler(_sp, request, cancellationToken);");
         sb.AppendLine();
@@ -180,6 +183,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IRequest<TResponse> request,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (request is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
+        sb.AppendLine();
         sb.AppendLine("            if (_requestResponseHandlers.TryGetValue(request.GetType(), out var handler))");
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, request, cancellationToken);");
         sb.AppendLine();
@@ -215,6 +221,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IStreamRequest<TResponse> request,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (request is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
+        sb.AppendLine();
         sb.AppendLine("            if (_streamHandlers.TryGetValue(request.GetType(), out var handler))");
         sb.AppendLine("                return (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)handler(_sp, request, cancellationToken);");
         sb.AppendLine();
@@ -250,6 +259,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.ICommand command,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (command is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(command));");
+        sb.AppendLine();
         sb.AppendLine("            if (_commandHandlers.TryGetValue(command.GetType(), out var handler))");
         sb.AppendLine("                return handler(_sp, command, cancellationToken);");
         sb.AppendLine();
@@ -285,6 +297,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.ICommand<TResponse> command,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (command is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(command));");
+        sb.AppendLine();
         sb.AppendLine("            if (_commandResponseHandlers.TryGetValue(command.GetType(), out var handler))");
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
         sb.AppendLine();
@@ -320,6 +335,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IQuery<TResponse> query,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (query is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(query));");
+        sb.AppendLine();
         sb.AppendLine("            if (_queryHandlers.TryGetValue(query.GetType(), out var handler))");
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
         sb.AppendLine();
@@ -381,6 +399,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.INotification notification,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (notification is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(notification));");
+        sb.AppendLine();
         sb.AppendLine("            if (!_notificationHandlers.TryGetValue(notification.GetType(), out var steps))");
         sb.AppendLine("                return global::System.Threading.Tasks.Task.CompletedTask;");
         sb.AppendLine();

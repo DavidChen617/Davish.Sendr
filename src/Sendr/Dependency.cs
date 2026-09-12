@@ -56,6 +56,11 @@ public static class Dependency
             where TRequest : IRequest<TResponse>
             where THandler : class, IRequestHandler<TRequest, TResponse>
         {
+            if (services.Any(d => d.ServiceType == typeof(IRequestHandler<TRequest, TResponse>)))
+                throw new InvalidOperationException(
+                    $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
+                    $"may be registered per request type; remove the duplicate AddRequestHandler call.");
+
             services.AddTransient<THandler>();
 
             var options = new RequestHandlerOptions<TRequest, TResponse>();
@@ -96,6 +101,11 @@ public static class Dependency
             where TRequest : IRequest
             where THandler : class, IRequestHandler<TRequest>
         {
+            if (services.Any(d => d.ServiceType == typeof(IRequestHandler<TRequest>)))
+                throw new InvalidOperationException(
+                    $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
+                    $"may be registered per request type; remove the duplicate AddRequestHandler call.");
+
             services.AddTransient<THandler>();
 
             var options = new RequestHandlerOptions<TRequest>();
@@ -137,6 +147,11 @@ public static class Dependency
             where TRequest : IStreamRequest<TResponse>
             where THandler : class, IStreamRequestHandler<TRequest, TResponse>
         {
+            if (services.Any(d => d.ServiceType == typeof(IStreamRequestHandler<TRequest, TResponse>)))
+                throw new InvalidOperationException(
+                    $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
+                    $"may be registered per stream request type; remove the duplicate AddStreamRequestHandler call.");
+
             services.AddTransient<THandler>();
 
             var options = new StreamRequestHandlerOptions<TRequest, TResponse>();
@@ -177,6 +192,11 @@ public static class Dependency
             where TCommand : ICommand
             where THandler : class, ICommandHandler<TCommand>
         {
+            if (services.Any(d => d.ServiceType == typeof(ICommandHandler<TCommand>)))
+                throw new InvalidOperationException(
+                    $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
+                    $"may be registered per command type; remove the duplicate AddCommandHandler call.");
+
             services.AddTransient<THandler>();
 
             var options = new CommandHandlerOptions<TCommand>();
@@ -218,6 +238,11 @@ public static class Dependency
             where TCommand : ICommand<TResponse>
             where THandler : class, ICommandHandler<TCommand, TResponse>
         {
+            if (services.Any(d => d.ServiceType == typeof(ICommandHandler<TCommand, TResponse>)))
+                throw new InvalidOperationException(
+                    $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
+                    $"may be registered per command type; remove the duplicate AddCommandHandler call.");
+
             services.AddTransient<THandler>();
 
             var options = new CommandHandlerOptions<TCommand, TResponse>();
@@ -259,6 +284,11 @@ public static class Dependency
             where TQuery : IQuery<TResponse>
             where THandler : class, IQueryHandler<TQuery, TResponse>
         {
+            if (services.Any(d => d.ServiceType == typeof(IQueryHandler<TQuery, TResponse>)))
+                throw new InvalidOperationException(
+                    $"A handler for '{typeof(TQuery)}' is already registered. Only one handler " +
+                    $"may be registered per query type; remove the duplicate AddQueryHandler call.");
+
             services.AddTransient<THandler>();
 
             var options = new QueryHandlerOptions<TQuery, TResponse>();

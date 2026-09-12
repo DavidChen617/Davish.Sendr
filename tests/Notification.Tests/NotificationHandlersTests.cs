@@ -359,6 +359,21 @@ public class NotificationHandlersTests
         // Then
         Assert.Throws<InvalidOperationException>(act);
     }
+
+    [Fact]
+    public async Task GivenIPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var publisher = new ServiceCollection()
+            .AddSendrNotification()
+            .BuildServiceProvider()
+            .GetRequiredService<IPublisher>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => publisher.PublishAsync(null!, default));
+        Assert.Equal("notification", exception.ParamName);
+    }
 }
 
 public class LogCollector

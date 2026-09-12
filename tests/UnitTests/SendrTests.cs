@@ -185,6 +185,54 @@ public class SendrTests
             ["BeginTransaction", "Start", "TaskVoidHandled", "End", "Commit"],
             collector.LogCollection);
     }
+
+    [Fact]
+    public async Task GivenISender_WhenSendNullRequest_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr()
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => sender.SendAsync((IRequest)null!, default));
+        Assert.Equal("request", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task GivenISender_WhenSendNullQuery_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr()
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => sender.SendAsync((IQuery<int>)null!, default));
+        Assert.Equal("query", exception.ParamName);
+    }
+
+    [Fact]
+    public void GivenRequestHandlerAlreadyRegistered_WhenAddRequestHandlerAgain_ThenThrowsInvalidOperationException()
+    {
+        // Given
+        var services = new ServiceCollection()
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, SomeCommandHandler>();
+
+        // When / Then
+        Assert.Throws<InvalidOperationException>(
+            () => services.AddRequestHandler<SomeCommand, SecondSomeCommandHandler>());
+    }
+}
+
+public sealed class SecondSomeCommandHandler : IRequestHandler<SomeCommand>
+{
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public sealed record SomeCommand : IRequest;
