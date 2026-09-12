@@ -17,7 +17,9 @@ internal sealed class QueryHandlerImpl<TQuery, TResponse> : QueryHandler<TRespon
         IQuery<TResponse> query,
         IServiceProvider sp,
         CancellationToken cancellationToken)
-        => sp
-            .GetRequiredService<IQueryHandler<TQuery, TResponse>>()
-            .HandleAsync((TQuery)query, cancellationToken);
+    {
+        var handler = sp.GetService<IQueryHandler<TQuery, TResponse>>()
+            ?? throw HandlerResolutionException.NoHandler("AddQueryHandler", typeof(TQuery), typeof(TResponse));
+        return handler.HandleAsync((TQuery)query, cancellationToken);
+    }
 }

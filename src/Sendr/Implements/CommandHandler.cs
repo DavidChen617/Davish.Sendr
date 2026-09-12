@@ -23,9 +23,11 @@ internal sealed class CommandHandlerImpl<TCommand> : CommandHandler
         ICommand command,
         IServiceProvider sp,
         CancellationToken cancellationToken)
-        => sp
-            .GetRequiredService<ICommandHandler<TCommand>>()
-            .HandleAsync((TCommand)command, cancellationToken);
+    {
+        var handler = sp.GetService<ICommandHandler<TCommand>>()
+            ?? throw HandlerResolutionException.NoHandler("AddCommandHandler", typeof(TCommand));
+        return handler.HandleAsync((TCommand)command, cancellationToken);
+    }
 }
 
 internal sealed class CommandHandlerImpl<TCommand, TResponse> : CommandHandler<TResponse>
@@ -35,7 +37,9 @@ internal sealed class CommandHandlerImpl<TCommand, TResponse> : CommandHandler<T
         ICommand<TResponse> command,
         IServiceProvider sp,
         CancellationToken cancellationToken)
-        => sp
-            .GetRequiredService<ICommandHandler<TCommand, TResponse>>()
-            .HandleAsync((TCommand)command, cancellationToken);
+    {
+        var handler = sp.GetService<ICommandHandler<TCommand, TResponse>>()
+            ?? throw HandlerResolutionException.NoHandler("AddCommandHandler", typeof(TCommand), typeof(TResponse));
+        return handler.HandleAsync((TCommand)command, cancellationToken);
+    }
 }
