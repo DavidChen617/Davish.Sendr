@@ -380,6 +380,33 @@ public class NotificationHandlersTests
     }
 
     [Fact]
+    public async Task GivenRetainedNotificationOptions_WhenMutatedAfterBuildServiceProvider_ThenBuiltProviderPipelineUnaffected()
+    {
+        // Given
+        NotificationHandlerOptions<SomeNotification>? retainedOptions = null;
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            // FirstNotificationHandler is pre-registered in DI so that, if this snapshot fix
+            // regresses, the call below would actually succeed and run it — rather than the test
+            // passing only because resolving an unregistered handler type throws for an unrelated
+            // reason.
+            .AddTransient<FirstNotificationHandler>()
+            .AddSendrNotification()
+            .AddNotificationHandler<SomeNotification>(x => retainedOptions = x)
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+
+        // When
+        retainedOptions!.Handler.Sequence.With<FirstNotificationHandler>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+
+        // Then
+        Assert.Empty(collector.LogCollection);
+    }
+
+    [Fact]
     public async Task GivenIPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
     {
         // Given

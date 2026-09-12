@@ -90,7 +90,16 @@ public static class Dependency
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per request type; remove the duplicate AddRequestHandler call.");
 
-            foreach (var decoratorType in options.Decorators)
+            // Snapshotted so the registered pipeline is frozen at this point: options.Decorators
+            // is a plain mutable Stack<Type>, and the factory below is a closure over `options`
+            // that runs on every future resolution, not just once now — if the caller kept a
+            // reference to `options` (easy to do by capturing the configure callback's own
+            // parameter) and pushed to it after BuildServiceProvider(), every AddRequestHandler
+            // registration made from that same options instance would otherwise pick up the
+            // change too, silently altering an already-built provider's dispatch behavior.
+            var decorators = options.Decorators.ToArray();
+
+            foreach (var decoratorType in decorators)
                 services.TryAddTransient(decoratorType);
 
             services.AddTransient<IRequestHandler<TRequest, TResponse>>(pv =>
@@ -103,7 +112,7 @@ public static class Dependency
 
                 try
                 {
-                    foreach (var decoratorType in options.Decorators)
+                    foreach (var decoratorType in decorators)
                     {
                         var decorator = (IRequestDecorator.WithResponse)pv.GetRequiredService(decoratorType);
                         handler = new DecoratorHandler<TRequest, TResponse>(decorator, handler);
@@ -147,7 +156,10 @@ public static class Dependency
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per request type; remove the duplicate AddRequestHandler call.");
 
-            foreach (var decoratorType in options.Decorators)
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this is snapshotted.
+            var decorators = options.Decorators.ToArray();
+
+            foreach (var decoratorType in decorators)
                 services.TryAddTransient(decoratorType);
 
             services.AddTransient<IRequestHandler<TRequest>>(pv =>
@@ -158,7 +170,7 @@ public static class Dependency
 
                 try
                 {
-                    foreach (var decoratorType in options.Decorators)
+                    foreach (var decoratorType in decorators)
                     {
                         var decorator = (IRequestDecorator)pv.GetRequiredService(decoratorType);
                         handler = new DecoratorHandler<TRequest>(decorator, handler);
@@ -203,7 +215,10 @@ public static class Dependency
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per stream request type; remove the duplicate AddStreamRequestHandler call.");
 
-            foreach (var decoratorType in options.Decorators)
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this is snapshotted.
+            var decorators = options.Decorators.ToArray();
+
+            foreach (var decoratorType in decorators)
                 services.TryAddTransient(decoratorType);
 
             services.AddTransient<IStreamRequestHandler<TRequest, TResponse>>(pv =>
@@ -214,7 +229,7 @@ public static class Dependency
 
                 try
                 {
-                    foreach (var decoratorType in options.Decorators)
+                    foreach (var decoratorType in decorators)
                     {
                         var decorator = (IStreamRequestDecorator)pv.GetRequiredService(decoratorType);
                         handler = new StreamDecoratorHandler<TRequest, TResponse>(decorator, handler);
@@ -258,7 +273,10 @@ public static class Dependency
                     $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
                     $"may be registered per command type; remove the duplicate AddCommandHandler call.");
 
-            foreach (var decoratorType in options.Decorators)
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this is snapshotted.
+            var decorators = options.Decorators.ToArray();
+
+            foreach (var decoratorType in decorators)
                 services.TryAddTransient(decoratorType);
 
             services.AddTransient<ICommandHandler<TCommand>>(pv =>
@@ -269,7 +287,7 @@ public static class Dependency
 
                 try
                 {
-                    foreach (var decoratorType in options.Decorators)
+                    foreach (var decoratorType in decorators)
                     {
                         var decorator = (ICommandDecorator)pv.GetRequiredService(decoratorType);
                         handler = new CommandDecoratorHandler<TCommand>(decorator, handler);
@@ -314,7 +332,10 @@ public static class Dependency
                     $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
                     $"may be registered per command type; remove the duplicate AddCommandHandler call.");
 
-            foreach (var decoratorType in options.Decorators)
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this is snapshotted.
+            var decorators = options.Decorators.ToArray();
+
+            foreach (var decoratorType in decorators)
                 services.TryAddTransient(decoratorType);
 
             services.AddTransient<ICommandHandler<TCommand, TResponse>>(pv =>
@@ -325,7 +346,7 @@ public static class Dependency
 
                 try
                 {
-                    foreach (var decoratorType in options.Decorators)
+                    foreach (var decoratorType in decorators)
                     {
                         var decorator = (ICommandDecorator.WithResponse)pv.GetRequiredService(decoratorType);
                         handler = new CommandDecoratorHandler<TCommand, TResponse>(decorator, handler);
@@ -370,7 +391,10 @@ public static class Dependency
                     $"A handler for '{typeof(TQuery)}' is already registered. Only one handler " +
                     $"may be registered per query type; remove the duplicate AddQueryHandler call.");
 
-            foreach (var decoratorType in options.Decorators)
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this is snapshotted.
+            var decorators = options.Decorators.ToArray();
+
+            foreach (var decoratorType in decorators)
                 services.TryAddTransient(decoratorType);
 
             services.AddTransient<IQueryHandler<TQuery, TResponse>>(pv =>
@@ -381,7 +405,7 @@ public static class Dependency
 
                 try
                 {
-                    foreach (var decoratorType in options.Decorators)
+                    foreach (var decoratorType in decorators)
                     {
                         var decorator = (IQueryDecorator)pv.GetRequiredService(decoratorType);
                         handler = new QueryDecoratorHandler<TQuery, TResponse>(decorator, handler);

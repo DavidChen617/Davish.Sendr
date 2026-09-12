@@ -22,11 +22,7 @@ internal sealed class DecoratorHandler<TRequest, TResponse>(
     // constructed from via ActivatorUtilities (which the container never sees or tracks on its
     // own). Forwarding disposal here is what makes a disposable handler still get released when
     // it's decorated.
-    public void Dispose()
-    {
-        if (inner is IDisposable disposable)
-            disposable.Dispose();
-    }
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
 
     public async ValueTask DisposeAsync()
     {
@@ -60,11 +56,7 @@ internal sealed class DecoratorHandler<TRequest>(
                cancellationToken);
 
     // See DecoratorHandler<TRequest, TResponse> for why this forwards disposal to inner.
-    public void Dispose()
-    {
-        if (inner is IDisposable disposable)
-            disposable.Dispose();
-    }
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
 
     public async ValueTask DisposeAsync()
     {

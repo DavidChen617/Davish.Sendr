@@ -18,11 +18,7 @@ internal sealed class CommandDecoratorHandler<TCommand, TResponse>(
                cancellationToken);
 
     // See DecoratorHandler<TRequest, TResponse> for why this forwards disposal to inner.
-    public void Dispose()
-    {
-        if (inner is IDisposable disposable)
-            disposable.Dispose();
-    }
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
 
     public async ValueTask DisposeAsync()
     {
@@ -56,11 +52,7 @@ internal sealed class CommandDecoratorHandler<TCommand>(
                cancellationToken);
 
     // See DecoratorHandler<TRequest, TResponse> for why this forwards disposal to inner.
-    public void Dispose()
-    {
-        if (inner is IDisposable disposable)
-            disposable.Dispose();
-    }
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
 
     public async ValueTask DisposeAsync()
     {

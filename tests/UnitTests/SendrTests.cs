@@ -409,6 +409,56 @@ public class SendrTests
             services.AddRequestHandler<SomeCommand, SomeCommandHandler>(_ =>
                 services.AddRequestHandler<SomeCommand, SecondSomeCommandHandler>()));
     }
+
+    [Fact]
+    public async Task GivenDecoratedAsyncOnlyHandler_WhenSyncScopeDisposed_ThenThrowsInvalidOperationException()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, AsyncOnlyDisposableCommandHandler>(x =>
+                x.Decorator.With<LoggingDecorator>())
+            .BuildServiceProvider();
+
+        // When
+        var scope = provider.CreateScope();
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        await sender.SendAsync(new SomeCommand(), default);
+
+        // Then
+        // Matches how the container itself handles an undecorated handler that only implements
+        // IAsyncDisposable: a synchronous scope can't finish its cleanup, so it must say so
+        // instead of silently skipping it.
+        Assert.Throws<InvalidOperationException>(() => scope.Dispose());
+    }
+
+    [Fact]
+    public async Task GivenRetainedRequestHandlerOptions_WhenMutatedAfterBuildServiceProvider_ThenBuiltProviderPipelineUnaffected()
+    {
+        // Given
+        var counter = new CallCounter();
+        RequestHandlerOptions<SomeCommand>? retainedOptions = null;
+        var provider = new ServiceCollection()
+            .AddSingleton(counter)
+            .AddScoped<LogCollector>()
+            .AddTransient<CountingDecorator>()
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, SomeCommandHandler>(x => retainedOptions = x)
+            .BuildServiceProvider();
+        var sender = provider.GetRequiredService<ISender>();
+        await sender.SendAsync(new SomeCommand(), default);
+
+        // When
+        // CountingDecorator is pre-registered in DI above so that, if this snapshot fix regresses,
+        // the call below would actually succeed and run it — rather than the test passing only
+        // because resolving an unregistered decorator type throws for an unrelated reason.
+        retainedOptions!.Decorator.With<CountingDecorator>();
+        await sender.SendAsync(new SomeCommand(), default);
+
+        // Then
+        Assert.Equal(0, counter.Count);
+    }
 }
 
 public sealed class DisposableCommandHandler : IRequestHandler<SomeCommand>, IDisposable
@@ -421,6 +471,29 @@ public sealed class DisposableCommandHandler : IRequestHandler<SomeCommand>, IDi
     public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public void Dispose() => DisposedCount++;
+}
+
+public sealed class AsyncOnlyDisposableCommandHandler : IRequestHandler<SomeCommand>, IAsyncDisposable
+{
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class CallCounter
+{
+    public int Count;
+}
+
+public sealed class CountingDecorator(CallCounter counter) : IRequestDecorator
+{
+    public Task HandleAsync<TRequest>(
+        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
+        where TRequest : IRequest
+    {
+        counter.Count++;
+        return next();
+    }
 }
 
 public sealed class DisposableProbe

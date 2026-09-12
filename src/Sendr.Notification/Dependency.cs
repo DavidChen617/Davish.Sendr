@@ -76,7 +76,15 @@ public static class NotificationDependency
             foreach (var decoratorType in options.DecoratorTypes)
                 services.TryAddTransient(decoratorType);
 
-            services.AddSingleton(new NotificationHandlers<TNotification>(options.SequenceSteps, options.ParallelSteps));
+            // Snapshotted into arrays rather than passed as-is: NotificationHandlers<TNotification>
+            // stores whatever IReadOnlyList it's given directly, and options.SequenceSteps/
+            // ParallelSteps are plain mutable Lists — passing them through live would mean a
+            // caller who kept a reference to `options` (easy to do by capturing the configure
+            // callback's own parameter) could append to those lists after BuildServiceProvider(),
+            // silently changing which handlers this already-registered singleton runs on every
+            // future PublishAsync call.
+            services.AddSingleton(new NotificationHandlers<TNotification>(
+                options.SequenceSteps.ToArray(), options.ParallelSteps.ToArray()));
 
             return services;
         }
