@@ -20,21 +20,7 @@ public static class NotificationGroupRunner
     public static async Task RunSequenceAsync(
         IReadOnlyList<Func<CancellationToken, Task>> steps, CancellationToken cancellationToken)
     {
-        List<Exception>? exceptions = null;
-
-        foreach (var step in steps)
-        {
-            try
-            {
-                await step(cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                exceptions ??= [with(1)];
-                exceptions.Add(ex);
-            }
-        }
-
+        var exceptions = await CollectSequenceExceptionsAsync(steps, cancellationToken);
         if (exceptions is not null)
             ThrowIfAny(exceptions);
     }
@@ -48,17 +34,115 @@ public static class NotificationGroupRunner
     public static async Task RunParallelAsync(
         IReadOnlyList<Func<CancellationToken, Task>> steps, CancellationToken cancellationToken)
     {
-        if (steps.Count == 0)
-            return;
+        var exceptions = await CollectParallelExceptionsAsync(steps, cancellationToken);
+        if (exceptions is not null)
+            ThrowIfAny(exceptions);
+    }
 
-        var tasks = new Task[steps.Count];
+    /// <summary>
+    /// Runs a Sequence group and a Parallel group concurrently with each other (rather than one
+    /// after the other), combining exceptions from both into one result: zero stay silent,
+    /// exactly one is rethrown as itself, and two or more are combined into one
+    /// <see cref="AggregateException"/>.
+    /// </summary>
+    public static async Task RunBothAsync(
+        IReadOnlyList<Func<CancellationToken, Task>> sequenceSteps,
+        IReadOnlyList<Func<CancellationToken, Task>> parallelSteps,
+        CancellationToken cancellationToken)
+    {
+        var sequenceTask = CollectSequenceExceptionsAsync(sequenceSteps, cancellationToken);
+        var parallelTask = CollectParallelExceptionsAsync(parallelSteps, cancellationToken);
+
+        // Collected as raw lists, never thrown-then-caught-then-reassembled in between: combining
+        // Sequence's and Parallel's failures used to mean throwing each group's own
+        // AggregateException and unwrapping it back to individual exceptions in the caller,
+        // assuming any AggregateException seen there was one this class had just built itself. A
+        // handler that faults with its own AggregateException (e.g. via Task.FromException) is
+        // indistinguishable from that assumption's point of view, so it got torn apart too,
+        // losing its identity/message/stack trace — and if that handler-owned AggregateException
+        // happened to have zero inner exceptions (a legal, meaningful exception on its own),
+        // flattening it produced literally nothing, turning a real failure into a silent success.
+        // Keeping each raw exception as its own list entry from the moment it's caught, all the
+        // way to the one ThrowIfAny call at the end, avoids ever needing to guess whose
+        // AggregateException is whose.
+        var sequenceExceptions = await sequenceTask;
+        var parallelExceptions = await parallelTask;
+
         List<Exception>? exceptions = null;
 
-        for (var i = 0; i < steps.Count; i++)
+        if (sequenceExceptions is not null)
+        {
+            exceptions ??= [with(sequenceExceptions.Count + (parallelExceptions?.Count ?? 0))];
+            exceptions.AddRange(sequenceExceptions);
+        }
+
+        if (parallelExceptions is not null)
+        {
+            exceptions ??= [with(parallelExceptions.Count)];
+            exceptions.AddRange(parallelExceptions);
+        }
+
+        if (exceptions is not null)
+            ThrowIfAny(exceptions);
+    }
+
+    private static async Task<List<Exception>?> CollectSequenceExceptionsAsync(
+        IReadOnlyList<Func<CancellationToken, Task>> steps, CancellationToken cancellationToken)
+    {
+        // Always copied, even when steps is already an array: a step can mutate the caller's own
+        // backing collection as a side effect of running. A List's structural mutation corrupts
+        // this loop outright (InvalidOperationException); an array passed through unmodified would
+        // still let a step replace one of ITS OWN later elements out from under an iteration that
+        // hasn't reached it yet. Copying unconditionally closes both gaps the same way, regardless
+        // of which shape the caller passed in.
+        var snapshot = steps.ToArray();
+        List<Exception>? exceptions = null;
+
+        foreach (var step in snapshot)
+        {
+            Task task;
+            try
+            {
+                task = step(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                exceptions ??= [with(1)];
+                exceptions.Add(ex);
+                continue;
+            }
+
+            try
+            {
+                await task;
+            }
+            catch (Exception ex)
+            {
+                exceptions ??= [with(1)];
+                AddFault(exceptions, task, ex);
+            }
+        }
+
+        return exceptions;
+    }
+
+    private static async Task<List<Exception>?> CollectParallelExceptionsAsync(
+        IReadOnlyList<Func<CancellationToken, Task>> steps, CancellationToken cancellationToken)
+    {
+        // See CollectSequenceExceptionsAsync for why this is copied unconditionally.
+        var snapshot = steps.ToArray();
+
+        if (snapshot.Length == 0)
+            return null;
+
+        var tasks = new Task[snapshot.Length];
+        List<Exception>? exceptions = null;
+
+        for (var i = 0; i < snapshot.Length; i++)
         {
             try
             {
-                tasks[i] = steps[i](cancellationToken);
+                tasks[i] = snapshot[i](cancellationToken);
             }
             catch (Exception ex)
             {
@@ -77,69 +161,28 @@ public static class NotificationGroupRunner
             catch (Exception ex)
             {
                 exceptions ??= [with(1)];
-                exceptions.Add(ex);
+                AddFault(exceptions, task, ex);
             }
         }
 
-        if (exceptions is not null)
-            ThrowIfAny(exceptions);
+        return exceptions;
     }
 
     /// <summary>
-    /// Runs a Sequence group and a Parallel group concurrently with each other (rather than one
-    /// after the other), combining exceptions from both into one result: zero stay silent,
-    /// exactly one is rethrown as itself, and two or more are combined into one
-    /// <see cref="AggregateException"/>.
+    /// Records every exception a step's task actually faulted with. <c>await</c> only ever
+    /// surfaces the first exception of a faulted <see cref="Task"/> (via <paramref name="caught"/>),
+    /// silently discarding the rest — a step whose task was completed via
+    /// <c>TaskCompletionSource.SetException</c> with more than one exception would otherwise lose
+    /// all but the first. <see cref="Task.Exception"/> preserves the complete set, so it's used
+    /// instead whenever the task actually faulted (as opposed to being canceled, which carries no
+    /// <see cref="Task.Exception"/> and is recorded as the single exception <c>await</c> caught).
     /// </summary>
-    public static async Task RunBothAsync(
-        IReadOnlyList<Func<CancellationToken, Task>> sequenceSteps,
-        IReadOnlyList<Func<CancellationToken, Task>> parallelSteps,
-        CancellationToken cancellationToken)
+    private static void AddFault(List<Exception> exceptions, Task task, Exception caught)
     {
-        var sequenceTask = RunSequenceAsync(sequenceSteps, cancellationToken);
-        var parallelTask = RunParallelAsync(parallelSteps, cancellationToken);
-
-        Exception? sequenceException = null;
-        Exception? parallelException = null;
-
-        try
-        {
-            await sequenceTask;
-        }
-        catch (Exception ex)
-        {
-            sequenceException = ex;
-        }
-
-        try
-        {
-            await parallelTask;
-        }
-        catch (Exception ex)
-        {
-            parallelException = ex;
-        }
-
-        var exceptions = new List<Exception>();
-        AddFlattened(exceptions, sequenceException);
-        AddFlattened(exceptions, parallelException);
-
-        ThrowIfAny(exceptions);
-    }
-
-    private static void AddFlattened(List<Exception> exceptions, Exception? exception)
-    {
-        switch (exception)
-        {
-            case null:
-                return;
-            case AggregateException aggregate:
-                exceptions.AddRange(aggregate.InnerExceptions);
-                return;
-            default:
-                exceptions.Add(exception);
-                return;
-        }
+        if (task.IsFaulted && task.Exception is { } aggregate)
+            exceptions.AddRange(aggregate.InnerExceptions);
+        else
+            exceptions.Add(caught);
     }
 
     /// <summary>

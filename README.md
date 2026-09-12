@@ -69,6 +69,9 @@ builder.Services
     .AddStreamRequestHandler<ListOrders, OrderDto, ListOrdersHandler>();
 ```
 
+> [!NOTE]
+> Only one handler may be registered per request/response pair — a second `AddRequestHandler`/`AddCommandHandler`/`AddQueryHandler`/`AddStreamRequestHandler` call for the same type and response throws `InvalidOperationException` instead of silently replacing the first. Calling `SendAsync`/`SendStream` for a type with no handler registered throws `InvalidOperationException` naming the registration call that's missing, rather than a bare DI "no service registered" message. Each registration is frozen at the point it's made — the `configure` callback's parameter isn't meant to be kept and mutated afterward; doing so has no effect on a provider already built from it.
+
 ## Requests
 
 Use `IRequest` for commands that do not return a value.
@@ -211,8 +214,8 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 `Davish.Sendr.Generators` discovers your `IRequestHandler`/`IStreamRequestHandler` implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr` and replaces every manual `AddRequestHandler`/`AddStreamRequestHandler` call, backed by a reflection-free `ISender`/`IStreamSender` — dispatch is a compile-time-built `Dictionary<Type, Func<...>>` lookup, not `MakeGenericType` + compiled expression trees.
 
 ```xml
-<PackageReference Include="Davish.Sendr" Version="3.1.0" />
-<PackageReference Include="Davish.Sendr.Generators" Version="1.1.0" PrivateAssets="all" />
+<PackageReference Include="Davish.Sendr" Version="3.2.2" />
+<PackageReference Include="Davish.Sendr.Generators" Version="1.1.5" PrivateAssets="all" />
 ```
 
 ```csharp
@@ -234,8 +237,11 @@ Notes:
 - This is purely additive — `AddSendr()` without `UseGenerators()` keeps registering the default reflection-based sender unchanged.
 - `o.UseGenerators()` and manual `AddRequestHandler`/`AddStreamRequestHandler` calls don't mix for the *same* request type: once `UseGenerators()` installs the generated sender, dispatch only knows about handlers discovered at compile time. Use `SendrOptions.UseSender<TSender>()` directly if you ever need to plug in your own sender implementation the same way.
 - `[Decorate<...>]` comes in arities 1 through 8; apply at most one per handler class.
+- Handler classes and records are both discovered — not just `class`.
+- A handler declared as `struct`/`record struct` is a compile error (`SENDR004`), since handler resolution (generated or manual) requires a reference type; use `class`/`record class` instead.
 - Generic (open) handler classes aren't discovered — register those manually with `AddRequestHandler`/`AddStreamRequestHandler` (without `UseGenerators()`).
-- A duplicate handler for the same request type is a compile error (`SENDR002`), not a silent pick.
+- A handler only counts if it's declared in the *same project* that calls `UseGenerators()`. This is a Roslyn source generator limitation, not a Sendr-specific one: an incremental generator only ever sees its own compilation's syntax trees, never the already-compiled output of a referenced project — so a handler that lives in a library referenced via `ProjectReference` (or a NuGet package) is invisible to the generator even though it compiles and links fine. Either declare handlers directly in the project that calls `UseGenerators()`, or register that library's handlers manually with `AddRequestHandler`/etc. instead.
+- A duplicate handler for the same request/response pair is a compile error (`SENDR002`), not a silent pick. A request type implementing `IRequest<TResponse>` (or `ICommand<TResponse>`/`IQuery<TResponse>`/`IStreamRequest<TResponse>`) for more than one `TResponse` is not a duplicate — each `TResponse` gets its own handler slot.
 - `ICommandHandler`/`IQueryHandler` are discovered the same way — `[Decorate<...>]` on a command/query handler validates against `ICommandDecorator`/`IQueryDecorator` instead.
 - `INotificationHandler` is covered too — see [Notification: source-generated registration](#notification-source-generated-registration-opt-in) below, since it plugs into `AddSendrNotification` rather than `AddSendr`.
 
@@ -372,7 +378,7 @@ public sealed class LoggingNotificationDecorator(ILogger<LoggingNotificationDeco
 > Both groups run every handler regardless of earlier failures — Sequence doesn't stop at the first throw, it just runs one handler at a time instead of concurrently. Every exception is collected: zero stay silent, exactly one is rethrown as itself (preserving its original stack trace), and two or more are combined into one `AggregateException` from `PublishAsync`. Handlers don't get an isolated DI scope either, so avoid sharing a non-thread-safe scoped service (such as a `DbContext`) across Parallel entries.
 
 > [!NOTE]
-> `AddNotificationHandler<TNotification>` can only be called once per notification type — it throws on a second call, since the Sequence's order is only meaningful when every handler for that notification is declared together.
+> `AddNotificationHandler<TNotification>` can only be called once per notification type — it throws on a second call, since the Sequence's order is only meaningful when every handler for that notification is declared together. The registration is frozen at the point it's made — the `configure` callback's parameter isn't meant to be kept and mutated afterward; doing so has no effect on a provider already built from it.
 
 ## Notification: source-generated registration (opt-in)
 

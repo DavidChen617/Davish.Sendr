@@ -359,6 +359,67 @@ public class NotificationHandlersTests
         // Then
         Assert.Throws<InvalidOperationException>(act);
     }
+
+    [Fact]
+    public void GivenReentrantNotificationRegistration_WhenConfigureRegistersSameNotificationAgain_ThenThrows()
+    {
+        // Given
+        var services = new ServiceCollection().AddSendrNotification();
+
+        // When / Then
+        // The reentrant inner call happens entirely inside the outer call's configure callback,
+        // before the outer call has registered anything — a naive "check once, up front" guard
+        // would let both calls pass, silently letting one registration shadow the other.
+        Assert.Throws<InvalidOperationException>(() =>
+            services.AddNotificationHandler<SomeNotification>(outer =>
+            {
+                services.AddNotificationHandler<SomeNotification>(inner =>
+                    inner.Handler.Sequence.With<FirstNotificationHandler>());
+                outer.Handler.Sequence.With<SecondNotificationHandler>();
+            }));
+    }
+
+    [Fact]
+    public async Task GivenRetainedNotificationOptions_WhenMutatedAfterBuildServiceProvider_ThenBuiltProviderPipelineUnaffected()
+    {
+        // Given
+        NotificationHandlerOptions<SomeNotification>? retainedOptions = null;
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            // FirstNotificationHandler is pre-registered in DI so that, if this snapshot fix
+            // regresses, the call below would actually succeed and run it — rather than the test
+            // passing only because resolving an unregistered handler type throws for an unrelated
+            // reason.
+            .AddTransient<FirstNotificationHandler>()
+            .AddSendrNotification()
+            .AddNotificationHandler<SomeNotification>(x => retainedOptions = x)
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+
+        // When
+        retainedOptions!.Handler.Sequence.With<FirstNotificationHandler>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+
+        // Then
+        Assert.Empty(collector.LogCollection);
+    }
+
+    [Fact]
+    public async Task GivenIPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var publisher = new ServiceCollection()
+            .AddSendrNotification()
+            .BuildServiceProvider()
+            .GetRequiredService<IPublisher>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => publisher.PublishAsync(null!, default));
+        Assert.Equal("notification", exception.ParamName);
+    }
 }
 
 public class LogCollector

@@ -8,7 +8,7 @@ namespace Davish.Sendr.Implements;
 internal sealed class QueryDecoratorHandler<TQuery, TResponse>(
     IQueryDecorator decorator,
     IQueryHandler<TQuery, TResponse> inner)
-    : IQueryHandler<TQuery, TResponse>
+    : IQueryHandler<TQuery, TResponse>, IDisposable, IAsyncDisposable
     where TQuery : IQuery<TResponse>
 {
     public Task<TResponse> HandleAsync(TQuery query, CancellationToken cancellationToken)
@@ -16,4 +16,20 @@ internal sealed class QueryDecoratorHandler<TQuery, TResponse>(
                query,
                () => inner.HandleAsync(query, cancellationToken),
                cancellationToken);
+
+    // See DecoratorHandler<TRequest, TResponse> for why this forwards disposal to inner.
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
+
+    public async ValueTask DisposeAsync()
+    {
+        switch (inner)
+        {
+            case IAsyncDisposable asyncDisposable:
+                await asyncDisposable.DisposeAsync();
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
+    }
 }

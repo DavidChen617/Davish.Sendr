@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!--
+    Deliberately references ONLY the two Abstractions packages — no Sendr/Sendr.Notification
+    (implementation) project reference — so this project itself fails to compile if ISender/
+    IPublisher (or any other contract type) ever moves back into the implementation assemblies.
+    That's the regression test: this project building at all is the assertion.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sendr.Abstractions\Sendr.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Sendr.Notification.Abstractions\Sendr.Notification.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -8,7 +8,7 @@ namespace Davish.Sendr.Implements;
 internal sealed class CommandDecoratorHandler<TCommand, TResponse>(
     ICommandDecorator.WithResponse decorator,
     ICommandHandler<TCommand, TResponse> inner)
-    : ICommandHandler<TCommand, TResponse>
+    : ICommandHandler<TCommand, TResponse>, IDisposable, IAsyncDisposable
     where TCommand : ICommand<TResponse>
 {
     public Task<TResponse> HandleAsync(TCommand command, CancellationToken cancellationToken)
@@ -16,6 +16,22 @@ internal sealed class CommandDecoratorHandler<TCommand, TResponse>(
                command,
                () => inner.HandleAsync(command, cancellationToken),
                cancellationToken);
+
+    // See DecoratorHandler<TRequest, TResponse> for why this forwards disposal to inner.
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
+
+    public async ValueTask DisposeAsync()
+    {
+        switch (inner)
+        {
+            case IAsyncDisposable asyncDisposable:
+                await asyncDisposable.DisposeAsync();
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
+    }
 }
 
 /// <summary>
@@ -26,7 +42,7 @@ internal sealed class CommandDecoratorHandler<TCommand, TResponse>(
 internal sealed class CommandDecoratorHandler<TCommand>(
     ICommandDecorator decorator,
     ICommandHandler<TCommand> inner)
-    : ICommandHandler<TCommand>
+    : ICommandHandler<TCommand>, IDisposable, IAsyncDisposable
     where TCommand : ICommand
 {
     public Task HandleAsync(TCommand command, CancellationToken cancellationToken)
@@ -34,4 +50,20 @@ internal sealed class CommandDecoratorHandler<TCommand>(
                command,
                () => inner.HandleAsync(command, cancellationToken),
                cancellationToken);
+
+    // See DecoratorHandler<TRequest, TResponse> for why this forwards disposal to inner.
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
+
+    public async ValueTask DisposeAsync()
+    {
+        switch (inner)
+        {
+            case IAsyncDisposable asyncDisposable:
+                await asyncDisposable.DisposeAsync();
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
+    }
 }

@@ -25,9 +25,11 @@ internal sealed class RequestHandlerImpl<TRequest> : RequestHandler
         IRequest request,
         IServiceProvider sp,
         CancellationToken cancellationToken)
-        => sp
-            .GetRequiredService<IRequestHandler<TRequest>>()
-            .HandleAsync((TRequest)request, cancellationToken);
+    {
+        var handler = sp.GetService<IRequestHandler<TRequest>>()
+            ?? throw HandlerResolutionException.NoHandler("AddRequestHandler", typeof(TRequest));
+        return handler.HandleAsync((TRequest)request, cancellationToken);
+    }
 }
 
 internal sealed class RequestHandlerImpl<TRequest, TResponse> : RequestHandler<TResponse>
@@ -37,7 +39,9 @@ internal sealed class RequestHandlerImpl<TRequest, TResponse> : RequestHandler<T
         IRequest<TResponse> request,
         IServiceProvider sp,
         CancellationToken cancellationToken)
-        => sp
-            .GetRequiredService<IRequestHandler<TRequest, TResponse>>()
-            .HandleAsync((TRequest)request, cancellationToken);
+    {
+        var handler = sp.GetService<IRequestHandler<TRequest, TResponse>>()
+            ?? throw HandlerResolutionException.NoHandler(nameof(Dependency.AddRequestHandler), typeof(TRequest), typeof(TResponse));
+        return handler.HandleAsync((TRequest)request, cancellationToken);
+    }
 }

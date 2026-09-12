@@ -8,7 +8,7 @@ namespace Davish.Sendr.Implements;
 internal sealed class StreamDecoratorHandler<TRequest, TResponse>(
     IStreamRequestDecorator decorator,
     IStreamRequestHandler<TRequest, TResponse> inner)
-    : IStreamRequestHandler<TRequest, TResponse>
+    : IStreamRequestHandler<TRequest, TResponse>, IDisposable, IAsyncDisposable
     where TRequest : IStreamRequest<TResponse>
 {
     public IAsyncEnumerable<TResponse> HandleAsync(TRequest request, CancellationToken cancellationToken)
@@ -16,4 +16,20 @@ internal sealed class StreamDecoratorHandler<TRequest, TResponse>(
                request,
                () => inner.HandleAsync(request, cancellationToken),
                cancellationToken);
+
+    // See DecoratorHandler<TRequest, TResponse> for why this forwards disposal to inner.
+    public void Dispose() => HandlerDisposal.DisposeSync(inner);
+
+    public async ValueTask DisposeAsync()
+    {
+        switch (inner)
+        {
+            case IAsyncDisposable asyncDisposable:
+                await asyncDisposable.DisposeAsync();
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
+    }
 }

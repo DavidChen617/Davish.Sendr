@@ -29,4 +29,14 @@ internal static class DiagnosticDescriptors
         category: "Davish.Sendr.Generators",
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ValueTypeHandlerNotSupported = new(
+        id: "SENDR004",
+        title: "Value type cannot be a Davish.Sendr handler",
+        messageFormat: "'{0}' is a struct/record struct and cannot be used as a Davish.Sendr handler — " +
+                        "handler registration (generated or manual, via AddRequestHandler and similar) " +
+                        "requires a reference type. Change it to a class or record class.",
+        category: "Davish.Sendr.Generators",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

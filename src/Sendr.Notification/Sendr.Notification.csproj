@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Davish.Sendr.Notification</PackageId>
     <AssemblyName>Davish.Sendr.Notification</AssemblyName>
-    <Version>2.1.0</Version>
+    <Version>2.2.3</Version>
     <Description>Notification publishing for Davish.Sendr — fan-out to Sequence and Parallel handler groups with a decorator pipeline.</Description>
   </PropertyGroup>
 

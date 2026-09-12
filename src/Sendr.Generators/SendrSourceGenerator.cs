@@ -48,7 +48,13 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     {
         var results = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: static (node, _) => node is ClassDeclarationSyntax { BaseList.Types.Count: > 0 },
+                // TypeDeclarationSyntax (not ClassDeclarationSyntax) so a record handler — a
+                // distinct syntax node kind in Roslyn — is discovered instead of being invisible
+                // to this predicate with no diagnostic at all (unlike an open generic handler,
+                // which gets SENDR003). This also lets struct/record struct declarations reach
+                // BuildModel, where they're rejected with SENDR004 (handler registration requires
+                // a reference type) instead of silently producing codegen that fails to compile.
+                predicate: static (node, _) => node is TypeDeclarationSyntax { BaseList.Types.Count: > 0 },
                 transform: static (ctx, ct) => Analyze(ctx, ct))
             .SelectMany(static (r, _) => r)
             .Collect();
@@ -65,7 +71,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
 
     private static ImmutableArray<AnalysisResult> Analyze(GeneratorSyntaxContext ctx, System.Threading.CancellationToken ct)
     {
-        var classDecl = (ClassDeclarationSyntax)ctx.Node;
+        var classDecl = (TypeDeclarationSyntax)ctx.Node;
 
         if (ctx.SemanticModel.GetDeclaredSymbol(classDecl, ct) is not INamedTypeSymbol classSymbol)
             return ImmutableArray<AnalysisResult>.Empty;
@@ -123,6 +129,15 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         HandlerKind kind,
         Compilation compilation)
     {
+        if (classSymbol.IsValueType)
+        {
+            var diagnostic = Diagnostic.Create(
+                DiagnosticDescriptors.ValueTypeHandlerNotSupported,
+                classSymbol.Locations.FirstOrDefault(),
+                classSymbol.ToDisplayString());
+            return new AnalysisResult(null, [diagnostic]);
+        }
+
         if (classSymbol.TypeParameters.Length > 0)
         {
             var diagnostic = Diagnostic.Create(
@@ -237,7 +252,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         // Every other handler kind allows exactly one handler per request type — a second one is
         // ambiguous (SENDR002). Notification handlers are the opposite: any number of classes may
         // handle the same notification type, so they skip this dedup entirely and are all kept.
-        var seen = new System.Collections.Generic.Dictionary<(HandlerKind, string), HandlerModel>();
+        var seen = new System.Collections.Generic.Dictionary<(HandlerKind, string, string?), HandlerModel>();
         var deduped = ImmutableArray.CreateBuilder<HandlerModel>();
 
         foreach (var result in results)
@@ -251,7 +266,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var key = (model.Kind, model.RequestType);
+            // ResponseType is part of the key because IRequest<out TResponse>/ICommand<out
+            // TResponse>/IQuery<out TResponse>/IStreamRequest<out TResponse> are all covariant in
+            // TResponse, so a single request/command/query type can legally implement e.g. both
+            // IQuery<int> and IQuery<string>. Keying on RequestType alone (mirroring the same gap
+            // HandlerRegistry's runtime cache had) would misreport that as an ambiguous handler.
+            var key = (model.Kind, model.RequestType, model.ResponseType);
             if (seen.TryGetValue(key, out var existing))
             {
                 spc.ReportDiagnostic(Diagnostic.Create(

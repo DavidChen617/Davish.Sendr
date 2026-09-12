@@ -32,6 +32,20 @@ internal static class SourceBuilder
         sb.AppendLine();
         sb.AppendLine("        public GeneratedSender(global::System.IServiceProvider sp) => _sp = sp;");
         sb.AppendLine();
+        // The manual AddRequestHandler/etc. path can say "call AddRequestHandler<...>()" because
+        // that's genuinely how it resolves handlers, through DI. GeneratedSender never does — its
+        // dispatch tables are baked in at compile time — so pointing users at AddRequestHandler
+        // here would be actively misleading. The real, generator-specific causes are: the handler
+        // lives in a different project (the generator only sees THIS compilation's own syntax
+        // trees, never an already-compiled ProjectReference's), it's a struct/record struct
+        // (SENDR004) or open generic (SENDR003), or it just isn't implemented yet.
+        sb.AppendLine("        private static string NotDiscovered(string handlerDescription) =>");
+        sb.AppendLine("            $\"Davish.Sendr: no {handlerDescription} was discovered by the source generator. \" +");
+        sb.AppendLine("            \"Make sure the handler is a class or record (not struct/record struct or open generic) \" +");
+        sb.AppendLine("            \"declared in this project's own compilation — the generator can't see a handler from a \" +");
+        sb.AppendLine("            \"referenced project, even via ProjectReference — or register it manually instead of \" +");
+        sb.AppendLine("            \"relying on UseGenerators().\";");
+        sb.AppendLine();
 
         AppendSendAsync(sb, senderModels.Where(m => m.Kind == HandlerKind.Request).ToImmutableArray());
         sb.AppendLine();
@@ -145,25 +159,34 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IRequest request,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (request is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
+        sb.AppendLine();
         sb.AppendLine("            if (_requestHandlers.TryGetValue(request.GetType(), out var handler))");
         sb.AppendLine("                return handler(_sp, request, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IRequestHandler<{request.GetType()}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}>\"));");
         sb.AppendLine("        }");
     }
 
     private static void AppendSendAsyncWithResponse(StringBuilder sb, ImmutableArray<HandlerModel> models)
     {
+        // Keyed on (request type, response type), not request type alone: IRequest<out TResponse>
+        // is covariant, so a single request type can legally implement it for more than one
+        // TResponse. A request-type-only key would let two [typeof(SameRequest)] entries collide
+        // in this dictionary initializer — which doesn't throw, it just silently keeps whichever
+        // one was added last (Dictionary indexer-set semantics), so the other TResponse's calls
+        // would silently get the wrong handler back and fail an InvalidCastException downstream.
         sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
-        sb.AppendLine("            global::System.Type,");
+        sb.AppendLine("            (global::System.Type Request, global::System.Type Response),");
         sb.AppendLine("            global::System.Func<global::System.IServiceProvider, global::Davish.Sendr.IRequest, " +
                       "global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task>> _requestResponseHandlers = new()");
         sb.AppendLine("        {");
 
         foreach (var model in models)
         {
-            sb.AppendLine($"            [typeof({model.RequestType})] = static (sp, request, cancellationToken) =>");
+            sb.AppendLine($"            [(typeof({model.RequestType}), typeof({model.ResponseType}))] = static (sp, request, cancellationToken) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                var r = ({model.RequestType})request;");
             sb.AppendLine($"                var h = (global::Davish.Sendr.IRequestHandler<{model.RequestType}, {model.ResponseType}>)" +
@@ -180,25 +203,30 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IRequest<TResponse> request,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (_requestResponseHandlers.TryGetValue(request.GetType(), out var handler))");
+        sb.AppendLine("            if (request is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
+        sb.AppendLine();
+        sb.AppendLine("            if (_requestResponseHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, request, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IRequestHandler<{request.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("        }");
     }
 
     private static void AppendSendStream(StringBuilder sb, ImmutableArray<HandlerModel> models)
     {
+        // Keyed on (request type, response type) — see AppendSendAsyncWithResponse: IStreamRequest<out
+        // TResponse> is covariant too, so the same key-collision risk applies here.
         sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
-        sb.AppendLine("            global::System.Type,");
+        sb.AppendLine("            (global::System.Type Request, global::System.Type Response),");
         sb.AppendLine("            global::System.Func<global::System.IServiceProvider, object, " +
                       "global::System.Threading.CancellationToken, object>> _streamHandlers = new()");
         sb.AppendLine("        {");
 
         foreach (var model in models)
         {
-            sb.AppendLine($"            [typeof({model.RequestType})] = static (sp, request, cancellationToken) =>");
+            sb.AppendLine($"            [(typeof({model.RequestType}), typeof({model.ResponseType}))] = static (sp, request, cancellationToken) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                var r = ({model.RequestType})request;");
             sb.AppendLine($"                var h = (global::Davish.Sendr.IStreamRequestHandler<{model.RequestType}, {model.ResponseType}>)" +
@@ -215,11 +243,29 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IStreamRequest<TResponse> request,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (_streamHandlers.TryGetValue(request.GetType(), out var handler))");
-        sb.AppendLine("                return (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine("            if (request is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
         sb.AppendLine();
-        sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("            return SendStreamCore<TResponse>(request, cancellationToken);");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        // Everything past the null check — the dictionary lookup, the registered handler and
+        // decorator's construction via DI, and any of a decorator's own eager (non-yield) body
+        // before its next() call — is deferred until enumeration actually starts, matching the
+        // documented "handling begins when enumeration starts" contract. Only a real
+        // async-iterator method's compiler-generated state machine (yield/await foreach)
+        // guarantees none of this runs before the caller's first MoveNextAsync().
+        sb.AppendLine("        private async global::System.Collections.Generic.IAsyncEnumerable<TResponse> SendStreamCore<TResponse>(");
+        sb.AppendLine("            global::Davish.Sendr.IStreamRequest<TResponse> request,");
+        sb.AppendLine("            [global::System.Runtime.CompilerServices.EnumeratorCancellation] global::System.Threading.CancellationToken cancellationToken)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (!_streamHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
+        sb.AppendLine("                throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                    NotDiscovered($\"IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine();
+        sb.AppendLine("            var inner = (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine("            await foreach (var item in inner.WithCancellation(cancellationToken))");
+        sb.AppendLine("                yield return item;");
         sb.AppendLine("        }");
     }
 
@@ -250,25 +296,30 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.ICommand command,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (command is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(command));");
+        sb.AppendLine();
         sb.AppendLine("            if (_commandHandlers.TryGetValue(command.GetType(), out var handler))");
         sb.AppendLine("                return handler(_sp, command, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no ICommandHandler<{command.GetType()}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}>\"));");
         sb.AppendLine("        }");
     }
 
     private static void AppendSendAsyncCommandWithResponse(StringBuilder sb, ImmutableArray<HandlerModel> models)
     {
+        // Keyed on (command type, response type) — see AppendSendAsyncWithResponse: ICommand<out
+        // TResponse> is covariant too, so the same key-collision risk applies here.
         sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
-        sb.AppendLine("            global::System.Type,");
+        sb.AppendLine("            (global::System.Type Request, global::System.Type Response),");
         sb.AppendLine("            global::System.Func<global::System.IServiceProvider, global::Davish.Sendr.ICommand, " +
                       "global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task>> _commandResponseHandlers = new()");
         sb.AppendLine("        {");
 
         foreach (var model in models)
         {
-            sb.AppendLine($"            [typeof({model.RequestType})] = static (sp, command, cancellationToken) =>");
+            sb.AppendLine($"            [(typeof({model.RequestType}), typeof({model.ResponseType}))] = static (sp, command, cancellationToken) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                var r = ({model.RequestType})command;");
             sb.AppendLine($"                var h = (global::Davish.Sendr.ICommandHandler<{model.RequestType}, {model.ResponseType}>)" +
@@ -285,25 +336,30 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.ICommand<TResponse> command,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (_commandResponseHandlers.TryGetValue(command.GetType(), out var handler))");
+        sb.AppendLine("            if (command is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(command));");
+        sb.AppendLine();
+        sb.AppendLine("            if (_commandResponseHandlers.TryGetValue((command.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no ICommandHandler<{command.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("        }");
     }
 
     private static void AppendSendAsyncQuery(StringBuilder sb, ImmutableArray<HandlerModel> models)
     {
+        // Keyed on (query type, response type) — see AppendSendAsyncWithResponse: IQuery<out
+        // TResponse> is covariant too, so the same key-collision risk applies here.
         sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
-        sb.AppendLine("            global::System.Type,");
+        sb.AppendLine("            (global::System.Type Request, global::System.Type Response),");
         sb.AppendLine("            global::System.Func<global::System.IServiceProvider, object, " +
                       "global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task>> _queryHandlers = new()");
         sb.AppendLine("        {");
 
         foreach (var model in models)
         {
-            sb.AppendLine($"            [typeof({model.RequestType})] = static (sp, query, cancellationToken) =>");
+            sb.AppendLine($"            [(typeof({model.RequestType}), typeof({model.ResponseType}))] = static (sp, query, cancellationToken) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                var r = ({model.RequestType})query;");
             sb.AppendLine($"                var h = (global::Davish.Sendr.IQueryHandler<{model.RequestType}, {model.ResponseType}>)" +
@@ -320,11 +376,14 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.IQuery<TResponse> query,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (_queryHandlers.TryGetValue(query.GetType(), out var handler))");
+        sb.AppendLine("            if (query is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(query));");
+        sb.AppendLine();
+        sb.AppendLine("            if (_queryHandlers.TryGetValue((query.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IQueryHandler<{query.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"IQueryHandler<{query.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("        }");
     }
 
@@ -381,6 +440,9 @@ internal static class SourceBuilder
         sb.AppendLine("            global::Davish.Sendr.INotification notification,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
+        sb.AppendLine("            if (notification is null)");
+        sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(notification));");
+        sb.AppendLine();
         sb.AppendLine("            if (!_notificationHandlers.TryGetValue(notification.GetType(), out var steps))");
         sb.AppendLine("                return global::System.Threading.Tasks.Task.CompletedTask;");
         sb.AppendLine();

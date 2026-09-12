@@ -113,6 +113,24 @@ public class GeneratorTests
     }
 
     [Fact]
+    public void GivenGeneratedStreamSender_WhenSendStreamNotYetEnumerated_ThenHandlerAndDecoratorNotResolved()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var streamSender = provider.GetRequiredService<IStreamSender>();
+
+        // When
+        _ = streamSender.SendStream(new GenStreamQuery(), default);
+
+        // Then
+        Assert.Empty(collector.LogCollection);
+    }
+
+    [Fact]
     public async Task GivenGeneratedSender_WhenSendCqrsCommand_ThenHandled()
     {
         // Given
@@ -286,6 +304,58 @@ public class GeneratorTests
     }
 
     [Fact]
+    public async Task GivenGeneratedSender_WhenSendNullQuery_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => sender.SendAsync((GenCqrsQuery)null!, default));
+        Assert.Equal("query", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task GivenNoHandlerDiscoveredForRequest_WhenSend_ThenMessageDoesNotSuggestAddRequestHandler()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sender.SendAsync(new GenUnhandledRequest(), default));
+
+        // Then
+        // GeneratedSender's dispatch table is baked in at compile time — it never resolves
+        // IRequestHandler<T> through DI — so pointing users at AddRequestHandler<...>() (the
+        // manual/reflection path's own fix, in HandlerResolutionException) would be misleading
+        // here. This message must steer toward generator-specific causes instead.
+        Assert.DoesNotContain("AddRequestHandler", exception.Message);
+        Assert.Contains("discovered by the source generator", exception.Message);
+    }
+
+    [Fact]
+    public async Task GivenGeneratedPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
+    {
+        // Given
+        var publisher = new ServiceCollection()
+            .AddSendrNotification(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<IPublisher>();
+
+        // When / Then
+        var exception = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => publisher.PublishAsync(null!, default));
+        Assert.Equal("notification", exception.ParamName);
+    }
+
+    [Fact]
     public async Task GivenMultipleHandlersThrow_WhenPublish_ThenAllExceptionsAreAggregated()
     {
         // Given
@@ -301,6 +371,40 @@ public class GeneratorTests
 
         // Then
         Assert.Equal(2, exception.InnerExceptions.Count);
+    }
+
+    [Fact]
+    public async Task GivenRecordHandler_WhenSendQuery_ThenHandled()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When
+        var result = await sender.SendAsync(new GenRecordHandledQuery(), default);
+
+        // Then
+        Assert.IsType<GenSomeDto>(result);
+    }
+
+    [Fact]
+    public async Task GivenQueryTypeImplementsTwoResponses_WhenSendBoth_ThenEachGetsItsOwnHandler()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When
+        var intResult = await sender.SendAsync<int>(new GenMultiResponseQuery(), default);
+        var stringResult = await sender.SendAsync<string>(new GenMultiResponseQuery(), default);
+
+        // Then
+        Assert.Equal(1, intResult);
+        Assert.Equal("hello", stringResult);
     }
 }
 
@@ -555,3 +659,33 @@ public sealed class SecondThrowingGenNotificationHandler : INotificationHandler<
     public Task HandleAsync(GenThrowingNotification notification, CancellationToken cancellationToken)
         => throw new InvalidOperationException("second");
 }
+
+public sealed record GenRecordHandledQuery : IQuery<GenSomeDto>;
+
+// A record (not class) handler declaration: RecordDeclarationSyntax is a distinct Roslyn syntax
+// node kind from ClassDeclarationSyntax, so this specifically exercises that the generator's
+// syntax predicate discovers records too, not just classes.
+public sealed record GenRecordHandledQueryHandler : IQueryHandler<GenRecordHandledQuery, GenSomeDto>
+{
+    public Task<GenSomeDto> HandleAsync(GenRecordHandledQuery query, CancellationToken cancellationToken)
+        => Task.FromResult(new GenSomeDto());
+}
+
+// IQuery<out TResponse> is covariant, so the same query type can legally implement it for more
+// than one TResponse. This must not trip the SENDR002 ambiguous-handler diagnostic, since the two
+// handlers below target different response types, not the same one.
+public sealed record GenMultiResponseQuery : IQuery<int>, IQuery<string>;
+
+public sealed class GenMultiResponseIntQueryHandler : IQueryHandler<GenMultiResponseQuery, int>
+{
+    public Task<int> HandleAsync(GenMultiResponseQuery query, CancellationToken cancellationToken)
+        => Task.FromResult(1);
+}
+
+public sealed class GenMultiResponseStringQueryHandler : IQueryHandler<GenMultiResponseQuery, string>
+{
+    public Task<string> HandleAsync(GenMultiResponseQuery query, CancellationToken cancellationToken)
+        => Task.FromResult("hello");
+}
+
+public sealed record GenUnhandledRequest : IRequest;
