@@ -228,11 +228,55 @@ public class SendrTests
         Assert.Throws<InvalidOperationException>(
             () => services.AddRequestHandler<SomeCommand, SecondSomeCommandHandler>());
     }
+
+    [Fact]
+    public async Task GivenQueryTypeImplementsTwoResponses_WhenSendBothConcurrently_ThenEachGetsItsOwnHandler()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr()
+            .AddQueryHandler<MultiResponseQuery, int, IntQueryHandler>()
+            .AddQueryHandler<MultiResponseQuery, string, StringQueryHandler>()
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+        var query = new MultiResponseQuery();
+
+        // When
+        var tasks = new List<Task>();
+        for (var i = 0; i < 200; i++)
+        {
+            var wantInt = i % 2 == 0;
+            tasks.Add(wantInt
+                ? sender.SendAsync<int>(query, default)
+                : sender.SendAsync<string>(query, default));
+        }
+        await Task.WhenAll(tasks);
+
+        // Then
+        var intResult = await sender.SendAsync<int>(query, default);
+        var stringResult = await sender.SendAsync<string>(query, default);
+        Assert.Equal(1, intResult);
+        Assert.Equal("hello", stringResult);
+    }
 }
 
 public sealed class SecondSomeCommandHandler : IRequestHandler<SomeCommand>
 {
     public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+public sealed record MultiResponseQuery : IQuery<int>, IQuery<string>;
+
+public sealed class IntQueryHandler : IQueryHandler<MultiResponseQuery, int>
+{
+    public Task<int> HandleAsync(MultiResponseQuery query, CancellationToken cancellationToken)
+        => Task.FromResult(1);
+}
+
+public sealed class StringQueryHandler : IQueryHandler<MultiResponseQuery, string>
+{
+    public Task<string> HandleAsync(MultiResponseQuery query, CancellationToken cancellationToken)
+        => Task.FromResult("hello");
 }
 
 public sealed record SomeCommand : IRequest;
