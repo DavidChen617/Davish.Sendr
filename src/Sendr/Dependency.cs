@@ -9,6 +9,28 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class Dependency
 {
+    /// <summary>
+    /// Disposes an already-constructed handler if a later decorator in its pipeline fails to
+    /// resolve — otherwise the handler (already built via <c>ActivatorUtilities.CreateInstance</c>,
+    /// so the container never captured it on its own) would never get disposed at all, since the
+    /// registration's factory never returns anything for the container to track when it throws.
+    /// </summary>
+    private static void DisposeOnFailure(object? handler)
+    {
+        switch (handler)
+        {
+            case IAsyncDisposable asyncDisposable:
+                // No async-returning factory overload exists for this DI registration shape, so
+                // this rare failure path (a decorator's own constructor throwing) blocks rather
+                // than leaking the handler.
+                asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
+    }
+
     extension(IServiceCollection services)
     {
         /// <summary>
@@ -56,13 +78,17 @@ public static class Dependency
             where TRequest : IRequest<TResponse>
             where THandler : class, IRequestHandler<TRequest, TResponse>
         {
+            var options = new RequestHandlerOptions<TRequest, TResponse>();
+            configure?.Invoke(options);
+
+            // Checked after configure runs, not before — see AddNotificationHandler for why: a
+            // reentrant AddRequestHandler<TRequest, TResponse, ...> call for the same TRequest
+            // from inside this configure callback would otherwise pass this same check too,
+            // letting one registration silently shadow the other instead of throwing.
             if (services.Any(d => d.ServiceType == typeof(IRequestHandler<TRequest, TResponse>)))
                 throw new InvalidOperationException(
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per request type; remove the duplicate AddRequestHandler call.");
-
-            var options = new RequestHandlerOptions<TRequest, TResponse>();
-            configure?.Invoke(options);
 
             foreach (var decoratorType in options.Decorators)
                 services.TryAddTransient(decoratorType);
@@ -75,10 +101,18 @@ public static class Dependency
                 // redundant standalone THandler registration.
                 IRequestHandler<TRequest, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
-                foreach (var decoratorType in options.Decorators)
+                try
                 {
-                    var decorator = (IRequestDecorator.WithResponse)pv.GetRequiredService(decoratorType);
-                    handler = new DecoratorHandler<TRequest, TResponse>(decorator, handler);
+                    foreach (var decoratorType in options.Decorators)
+                    {
+                        var decorator = (IRequestDecorator.WithResponse)pv.GetRequiredService(decoratorType);
+                        handler = new DecoratorHandler<TRequest, TResponse>(decorator, handler);
+                    }
+                }
+                catch
+                {
+                    DisposeOnFailure(handler);
+                    throw;
                 }
 
                 return handler;
@@ -103,13 +137,15 @@ public static class Dependency
             where TRequest : IRequest
             where THandler : class, IRequestHandler<TRequest>
         {
+            var options = new RequestHandlerOptions<TRequest>();
+            configure?.Invoke(options);
+
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this check runs after
+            // configure instead of before.
             if (services.Any(d => d.ServiceType == typeof(IRequestHandler<TRequest>)))
                 throw new InvalidOperationException(
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per request type; remove the duplicate AddRequestHandler call.");
-
-            var options = new RequestHandlerOptions<TRequest>();
-            configure?.Invoke(options);
 
             foreach (var decoratorType in options.Decorators)
                 services.TryAddTransient(decoratorType);
@@ -120,10 +156,18 @@ public static class Dependency
                 // THandler directly instead of resolving it via its own registration.
                 IRequestHandler<TRequest> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
-                foreach (var decoratorType in options.Decorators)
+                try
                 {
-                    var decorator = (IRequestDecorator)pv.GetRequiredService(decoratorType);
-                    handler = new DecoratorHandler<TRequest>(decorator, handler);
+                    foreach (var decoratorType in options.Decorators)
+                    {
+                        var decorator = (IRequestDecorator)pv.GetRequiredService(decoratorType);
+                        handler = new DecoratorHandler<TRequest>(decorator, handler);
+                    }
+                }
+                catch
+                {
+                    DisposeOnFailure(handler);
+                    throw;
                 }
 
                 return handler;
@@ -149,13 +193,15 @@ public static class Dependency
             where TRequest : IStreamRequest<TResponse>
             where THandler : class, IStreamRequestHandler<TRequest, TResponse>
         {
+            var options = new StreamRequestHandlerOptions<TRequest, TResponse>();
+            configure?.Invoke(options);
+
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this check runs after
+            // configure instead of before.
             if (services.Any(d => d.ServiceType == typeof(IStreamRequestHandler<TRequest, TResponse>)))
                 throw new InvalidOperationException(
                     $"A handler for '{typeof(TRequest)}' is already registered. Only one handler " +
                     $"may be registered per stream request type; remove the duplicate AddStreamRequestHandler call.");
-
-            var options = new StreamRequestHandlerOptions<TRequest, TResponse>();
-            configure?.Invoke(options);
 
             foreach (var decoratorType in options.Decorators)
                 services.TryAddTransient(decoratorType);
@@ -166,10 +212,18 @@ public static class Dependency
                 // THandler directly instead of resolving it via its own registration.
                 IStreamRequestHandler<TRequest, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
-                foreach (var decoratorType in options.Decorators)
+                try
                 {
-                    var decorator = (IStreamRequestDecorator)pv.GetRequiredService(decoratorType);
-                    handler = new StreamDecoratorHandler<TRequest, TResponse>(decorator, handler);
+                    foreach (var decoratorType in options.Decorators)
+                    {
+                        var decorator = (IStreamRequestDecorator)pv.GetRequiredService(decoratorType);
+                        handler = new StreamDecoratorHandler<TRequest, TResponse>(decorator, handler);
+                    }
+                }
+                catch
+                {
+                    DisposeOnFailure(handler);
+                    throw;
                 }
 
                 return handler;
@@ -194,13 +248,15 @@ public static class Dependency
             where TCommand : ICommand
             where THandler : class, ICommandHandler<TCommand>
         {
+            var options = new CommandHandlerOptions<TCommand>();
+            configure?.Invoke(options);
+
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this check runs after
+            // configure instead of before.
             if (services.Any(d => d.ServiceType == typeof(ICommandHandler<TCommand>)))
                 throw new InvalidOperationException(
                     $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
                     $"may be registered per command type; remove the duplicate AddCommandHandler call.");
-
-            var options = new CommandHandlerOptions<TCommand>();
-            configure?.Invoke(options);
 
             foreach (var decoratorType in options.Decorators)
                 services.TryAddTransient(decoratorType);
@@ -211,10 +267,18 @@ public static class Dependency
                 // THandler directly instead of resolving it via its own registration.
                 ICommandHandler<TCommand> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
-                foreach (var decoratorType in options.Decorators)
+                try
                 {
-                    var decorator = (ICommandDecorator)pv.GetRequiredService(decoratorType);
-                    handler = new CommandDecoratorHandler<TCommand>(decorator, handler);
+                    foreach (var decoratorType in options.Decorators)
+                    {
+                        var decorator = (ICommandDecorator)pv.GetRequiredService(decoratorType);
+                        handler = new CommandDecoratorHandler<TCommand>(decorator, handler);
+                    }
+                }
+                catch
+                {
+                    DisposeOnFailure(handler);
+                    throw;
                 }
 
                 return handler;
@@ -240,13 +304,15 @@ public static class Dependency
             where TCommand : ICommand<TResponse>
             where THandler : class, ICommandHandler<TCommand, TResponse>
         {
+            var options = new CommandHandlerOptions<TCommand, TResponse>();
+            configure?.Invoke(options);
+
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this check runs after
+            // configure instead of before.
             if (services.Any(d => d.ServiceType == typeof(ICommandHandler<TCommand, TResponse>)))
                 throw new InvalidOperationException(
                     $"A handler for '{typeof(TCommand)}' is already registered. Only one handler " +
                     $"may be registered per command type; remove the duplicate AddCommandHandler call.");
-
-            var options = new CommandHandlerOptions<TCommand, TResponse>();
-            configure?.Invoke(options);
 
             foreach (var decoratorType in options.Decorators)
                 services.TryAddTransient(decoratorType);
@@ -257,10 +323,18 @@ public static class Dependency
                 // THandler directly instead of resolving it via its own registration.
                 ICommandHandler<TCommand, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
-                foreach (var decoratorType in options.Decorators)
+                try
                 {
-                    var decorator = (ICommandDecorator.WithResponse)pv.GetRequiredService(decoratorType);
-                    handler = new CommandDecoratorHandler<TCommand, TResponse>(decorator, handler);
+                    foreach (var decoratorType in options.Decorators)
+                    {
+                        var decorator = (ICommandDecorator.WithResponse)pv.GetRequiredService(decoratorType);
+                        handler = new CommandDecoratorHandler<TCommand, TResponse>(decorator, handler);
+                    }
+                }
+                catch
+                {
+                    DisposeOnFailure(handler);
+                    throw;
                 }
 
                 return handler;
@@ -286,13 +360,15 @@ public static class Dependency
             where TQuery : IQuery<TResponse>
             where THandler : class, IQueryHandler<TQuery, TResponse>
         {
+            var options = new QueryHandlerOptions<TQuery, TResponse>();
+            configure?.Invoke(options);
+
+            // See AddRequestHandler<TRequest, TResponse, THandler> for why this check runs after
+            // configure instead of before.
             if (services.Any(d => d.ServiceType == typeof(IQueryHandler<TQuery, TResponse>)))
                 throw new InvalidOperationException(
                     $"A handler for '{typeof(TQuery)}' is already registered. Only one handler " +
                     $"may be registered per query type; remove the duplicate AddQueryHandler call.");
-
-            var options = new QueryHandlerOptions<TQuery, TResponse>();
-            configure?.Invoke(options);
 
             foreach (var decoratorType in options.Decorators)
                 services.TryAddTransient(decoratorType);
@@ -303,10 +379,18 @@ public static class Dependency
                 // THandler directly instead of resolving it via its own registration.
                 IQueryHandler<TQuery, TResponse> handler = ActivatorUtilities.CreateInstance<THandler>(pv);
 
-                foreach (var decoratorType in options.Decorators)
+                try
                 {
-                    var decorator = (IQueryDecorator)pv.GetRequiredService(decoratorType);
-                    handler = new QueryDecoratorHandler<TQuery, TResponse>(decorator, handler);
+                    foreach (var decoratorType in options.Decorators)
+                    {
+                        var decorator = (IQueryDecorator)pv.GetRequiredService(decoratorType);
+                        handler = new QueryDecoratorHandler<TQuery, TResponse>(decorator, handler);
+                    }
+                }
+                catch
+                {
+                    DisposeOnFailure(handler);
+                    throw;
                 }
 
                 return handler;

@@ -322,6 +322,93 @@ public class SendrTests
         // Then
         Assert.Equal(1, DisposableCommandHandler.DisposedCount);
     }
+
+    [Fact]
+    public async Task GivenDisposableHandlerWithDecorator_WhenScopeEnds_ThenDisposedExactlyOnce()
+    {
+        // Given
+        var probe = new DisposableProbe();
+        var provider = new ServiceCollection()
+            .AddSingleton(probe)
+            .AddScoped<LogCollector>()
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, ProbedDisposableCommandHandler>(x =>
+                x.Decorator.With<LoggingDecorator>())
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await sender.SendAsync(new SomeCommand(), default);
+            Assert.Equal(1, probe.ConstructedCount);
+        }
+
+        // Then
+        Assert.Equal(1, probe.DisposedCount);
+    }
+
+    [Fact]
+    public async Task GivenDecoratorConstructorThrows_WhenSendAsync_ThenAlreadyConstructedHandlerIsDisposed()
+    {
+        // Given
+        var probe = new DisposableProbe();
+        var provider = new ServiceCollection()
+            .AddSingleton(probe)
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, ProbedDisposableCommandHandler>(x =>
+                x.Decorator.With<ThrowingConstructorDecorator>())
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sender.SendAsync(new SomeCommand(), default));
+        }
+
+        // Then
+        Assert.Equal(1, probe.ConstructedCount);
+        Assert.Equal(1, probe.DisposedCount);
+    }
+
+    [Fact]
+    public async Task GivenDisposableQueryHandlerWithDecorator_WhenScopeEnds_ThenDisposedExactlyOnce()
+    {
+        // Given
+        var probe = new DisposableProbe();
+        var provider = new ServiceCollection()
+            .AddSingleton(probe)
+            .AddScoped<LogCollector>()
+            .AddSendr()
+            .AddQueryHandler<SomeDisposableQuery, SomeDto, ProbedDisposableQueryHandler>(x =>
+                x.Decorator.With<QueryLoggingDecorator>())
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await sender.SendAsync(new SomeDisposableQuery(), default);
+            Assert.Equal(1, probe.ConstructedCount);
+        }
+
+        // Then
+        Assert.Equal(1, probe.DisposedCount);
+    }
+
+    [Fact]
+    public void GivenReentrantRequestHandlerRegistration_WhenConfigureRegistersSameRequestAgain_ThenThrows()
+    {
+        // Given
+        var services = new ServiceCollection().AddSendr();
+
+        // When / Then
+        Assert.Throws<InvalidOperationException>(() =>
+            services.AddRequestHandler<SomeCommand, SomeCommandHandler>(_ =>
+                services.AddRequestHandler<SomeCommand, SecondSomeCommandHandler>()));
+    }
 }
 
 public sealed class DisposableCommandHandler : IRequestHandler<SomeCommand>, IDisposable
@@ -334,6 +421,37 @@ public sealed class DisposableCommandHandler : IRequestHandler<SomeCommand>, IDi
     public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public void Dispose() => DisposedCount++;
+}
+
+public sealed class DisposableProbe
+{
+    public int ConstructedCount;
+    public int DisposedCount;
+}
+
+public sealed class ProbedDisposableCommandHandler : IRequestHandler<SomeCommand>, IDisposable
+{
+    private readonly DisposableProbe _probe;
+
+    public ProbedDisposableCommandHandler(DisposableProbe probe)
+    {
+        _probe = probe;
+        _probe.ConstructedCount++;
+    }
+
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public void Dispose() => _probe.DisposedCount++;
+}
+
+public sealed class ThrowingConstructorDecorator : IRequestDecorator
+{
+    public ThrowingConstructorDecorator() => throw new InvalidOperationException("decorator ctor failed");
+
+    public Task HandleAsync<TRequest>(
+        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
+        where TRequest : IRequest
+        => next();
 }
 
 public sealed class SecondSomeCommandHandler : IRequestHandler<SomeCommand>
@@ -455,5 +573,36 @@ public sealed class StreamLoggingDecorator(LogCollector collector) : IStreamRequ
         await foreach (var item in next().WithCancellation(cancellationToken))
             yield return item;
         collector.LogCollection.Add("StreamEnd");
+    }
+}
+
+public sealed record SomeDisposableQuery : IQuery<SomeDto>;
+
+public sealed class ProbedDisposableQueryHandler : IQueryHandler<SomeDisposableQuery, SomeDto>, IDisposable
+{
+    private readonly DisposableProbe _probe;
+
+    public ProbedDisposableQueryHandler(DisposableProbe probe)
+    {
+        _probe = probe;
+        _probe.ConstructedCount++;
+    }
+
+    public Task<SomeDto> HandleAsync(SomeDisposableQuery query, CancellationToken cancellationToken)
+        => Task.FromResult(new SomeDto());
+
+    public void Dispose() => _probe.DisposedCount++;
+}
+
+public sealed class QueryLoggingDecorator(LogCollector collector) : IQueryDecorator
+{
+    public async Task<TResponse> HandleAsync<TQuery, TResponse>(
+        TQuery query, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        where TQuery : IQuery<TResponse>
+    {
+        collector.LogCollection.Add("Start");
+        var response = await next();
+        collector.LogCollection.Add("End");
+        return response;
     }
 }
