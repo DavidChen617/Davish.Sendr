@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#
+# pre-commit: check staged .cs files against .editorconfig formatting rules.
+# If `dotnet format --verify-no-changes` fails, run `dotnet format` to fix them
+# and re-stage the fixed files so this commit includes the formatted result.
+
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+solution_files=()
+while IFS= read -r -d '' f; do
+    solution_files+=("$f")
+done < <(find . -maxdepth 1 \( -iname '*.sln' -o -iname '*.slnx' \) -print0)
+
+if [ ${#solution_files[@]} -eq 0 ]; then
+    echo "Error: no .sln/.slnx file found at repo root." >&2
+    exit 1
+elif [ ${#solution_files[@]} -gt 1 ]; then
+    echo "Error: multiple solution files found at repo root, please pick one: ${solution_files[*]}" >&2
+    exit 1
+fi
+
+solution="${solution_files[0]}"
+
+if ! command -v dotnet >/dev/null 2>&1; then
+    echo "Warning: dotnet CLI not found, skipping format check." >&2
+    exit 0
+fi
+
+# Collect staged, non-deleted .cs files (NUL-delimited to handle special characters)
+staged_files=()
+while IFS= read -r -d '' f; do
+    staged_files+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.cs')
+
+if [ ${#staged_files[@]} -eq 0 ]; then
+    exit 0
+fi
+
+if dotnet format "$solution" --verify-no-changes -v diagnostic --include "${staged_files[@]}" >/dev/null 2>&1; then
+    exit 0
+fi
+
+echo "dotnet format check failed, auto-formatting the following files:"
+printf '  - %s\n' "${staged_files[@]}"
+
+dotnet format "$solution" --include "${staged_files[@]}"
+
+echo
+echo "Formatting done, re-staged the following files:"
+for f in "${staged_files[@]}"; do
+    git add -- "$f"
+    echo "  - $f"
+done
+
+exit 0
