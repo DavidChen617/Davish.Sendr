@@ -32,6 +32,20 @@ internal static class SourceBuilder
         sb.AppendLine();
         sb.AppendLine("        public GeneratedSender(global::System.IServiceProvider sp) => _sp = sp;");
         sb.AppendLine();
+        // The manual AddRequestHandler/etc. path can say "call AddRequestHandler<...>()" because
+        // that's genuinely how it resolves handlers, through DI. GeneratedSender never does — its
+        // dispatch tables are baked in at compile time — so pointing users at AddRequestHandler
+        // here would be actively misleading. The real, generator-specific causes are: the handler
+        // lives in a different project (the generator only sees THIS compilation's own syntax
+        // trees, never an already-compiled ProjectReference's), it's a struct/record struct
+        // (SENDR004) or open generic (SENDR003), or it just isn't implemented yet.
+        sb.AppendLine("        private static string NotDiscovered(string handlerDescription) =>");
+        sb.AppendLine("            $\"Davish.Sendr: no {handlerDescription} was discovered by the source generator. \" +");
+        sb.AppendLine("            \"Make sure the handler is a class or record (not struct/record struct or open generic) \" +");
+        sb.AppendLine("            \"declared in this project's own compilation — the generator can't see a handler from a \" +");
+        sb.AppendLine("            \"referenced project, even via ProjectReference — or register it manually instead of \" +");
+        sb.AppendLine("            \"relying on UseGenerators().\";");
+        sb.AppendLine();
 
         AppendSendAsync(sb, senderModels.Where(m => m.Kind == HandlerKind.Request).ToImmutableArray());
         sb.AppendLine();
@@ -152,7 +166,7 @@ internal static class SourceBuilder
         sb.AppendLine("                return handler(_sp, request, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IRequestHandler<{request.GetType()}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}>\"));");
         sb.AppendLine("        }");
     }
 
@@ -196,7 +210,7 @@ internal static class SourceBuilder
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, request, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IRequestHandler<{request.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("        }");
     }
 
@@ -247,7 +261,7 @@ internal static class SourceBuilder
         sb.AppendLine("        {");
         sb.AppendLine("            if (!_streamHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("                throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                    $\"Davish.Sendr: no IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("                    NotDiscovered($\"IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine();
         sb.AppendLine("            var inner = (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)handler(_sp, request, cancellationToken);");
         sb.AppendLine("            await foreach (var item in inner.WithCancellation(cancellationToken))");
@@ -289,7 +303,7 @@ internal static class SourceBuilder
         sb.AppendLine("                return handler(_sp, command, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no ICommandHandler<{command.GetType()}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}>\"));");
         sb.AppendLine("        }");
     }
 
@@ -329,7 +343,7 @@ internal static class SourceBuilder
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no ICommandHandler<{command.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("        }");
     }
 
@@ -369,7 +383,7 @@ internal static class SourceBuilder
         sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                $\"Davish.Sendr: no IQueryHandler<{query.GetType()}, {typeof(TResponse)}> is registered.\");");
+        sb.AppendLine("                NotDiscovered($\"IQueryHandler<{query.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("        }");
     }
 

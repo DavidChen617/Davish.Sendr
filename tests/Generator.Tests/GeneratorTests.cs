@@ -319,6 +319,28 @@ public class GeneratorTests
     }
 
     [Fact]
+    public async Task GivenNoHandlerDiscoveredForRequest_WhenSend_ThenMessageDoesNotSuggestAddRequestHandler()
+    {
+        // Given
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sender.SendAsync(new GenUnhandledRequest(), default));
+
+        // Then
+        // GeneratedSender's dispatch table is baked in at compile time — it never resolves
+        // IRequestHandler<T> through DI — so pointing users at AddRequestHandler<...>() (the
+        // manual/reflection path's own fix, in HandlerResolutionException) would be misleading
+        // here. This message must steer toward generator-specific causes instead.
+        Assert.DoesNotContain("AddRequestHandler", exception.Message);
+        Assert.Contains("discovered by the source generator", exception.Message);
+    }
+
+    [Fact]
     public async Task GivenGeneratedPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
     {
         // Given
@@ -665,3 +687,5 @@ public sealed class GenMultiResponseStringQueryHandler : IQueryHandler<GenMultiR
     public Task<string> HandleAsync(GenMultiResponseQuery query, CancellationToken cancellationToken)
         => Task.FromResult("hello");
 }
+
+public sealed record GenUnhandledRequest : IRequest;
