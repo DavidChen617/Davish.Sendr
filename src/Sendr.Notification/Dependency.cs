@@ -31,8 +31,13 @@ public static class NotificationDependency
             if (!options.HasCustomPublisher)
             {
                 services.AddSingleton<NotificationHandlersRegistry>();
-                services.AddScoped<Publisher>();
-                services.AddScoped<IPublisher>(sp => sp.GetRequiredService<Publisher>());
+
+                // Constructed here rather than via a separate services.AddScoped<Publisher>()
+                // registration also resolved via GetRequiredService — see NotificationOptions.
+                // UsePublisher for why: a second registration whose factory also returns the
+                // same disposable instance would mean the container captures it for disposal
+                // twice instead of once.
+                services.AddScoped<IPublisher>(sp => ActivatorUtilities.CreateInstance<Publisher>(sp));
             }
 
             return services;

@@ -53,9 +53,18 @@ public static class Dependency
             if (!options.HasCustomSender)
             {
                 services.AddSingleton<HandlerRegistry>();
-                services.AddScoped<Sender>();
-                services.AddScoped<ISender>(sp => sp.GetRequiredService<Sender>());
-                services.AddScoped<IStreamSender>(sp => sp.GetRequiredService<Sender>());
+
+                // ISender is the only registration whose factory actually constructs Sender —
+                // IStreamSender resolves through it instead of also constructing/resolving Sender
+                // on its own. A third, separate Sender registration alongside ISender/IStreamSender
+                // would mean the container captures the same disposable instance for disposal up
+                // to three times over (once per registration whose factory returns it) if Sender
+                // were ever made disposable; going through ISender's own resolution keeps that at
+                // two — see SendrOptions.UseSender for the same reasoning applied to a custom
+                // sender, where it matters today because a custom implementation commonly is
+                // disposable.
+                services.AddScoped<ISender>(sp => ActivatorUtilities.CreateInstance<Sender>(sp));
+                services.AddScoped<IStreamSender>(sp => sp.GetRequiredService<ISender>());
             }
 
             return services;

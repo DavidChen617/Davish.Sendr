@@ -31,8 +31,14 @@ public sealed class NotificationOptions
         where TPublisher : class, IPublisher
     {
         HasCustomPublisher = true;
-        Services.AddScoped<TPublisher>();
-        Services.AddScoped<IPublisher>(sp => sp.GetRequiredService<TPublisher>());
+
+        // Constructed here rather than via a separate Services.AddScoped<TPublisher>()
+        // registration also resolved via GetRequiredService: a second registration whose factory
+        // also returns the same disposable instance would mean the container captures it for
+        // disposal twice instead of once, since capture happens per registration, not per unique
+        // instance. Unlike SendrOptions.UseSender, there's only the one public interface here
+        // (IPublisher), so this achieves exactly one disposal — not just a reduced one.
+        Services.AddScoped<IPublisher>(sp => ActivatorUtilities.CreateInstance<TPublisher>(sp));
         return this;
     }
 }

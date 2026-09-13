@@ -420,11 +420,53 @@ public class NotificationHandlersTests
             () => publisher.PublishAsync(null!, default));
         Assert.Equal("notification", exception.ParamName);
     }
+
+    [Fact]
+    public async Task GivenDisposableCustomPublisher_WhenScopeResolvesIPublisher_ThenDisposedExactlyOnce()
+    {
+        // Given
+        var probe = new DisposableProbe();
+        var provider = new ServiceCollection()
+            .AddSingleton(probe)
+            .AddSendrNotification(o => o.UsePublisher<DisposableCustomPublisher>())
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            _ = scope.ServiceProvider.GetRequiredService<IPublisher>();
+            Assert.Equal(1, probe.ConstructedCount);
+        }
+
+        // Then
+        Assert.Equal(1, probe.DisposedCount);
+    }
 }
 
 public class LogCollector
 {
     public readonly List<string> LogCollection = new();
+}
+
+public sealed class DisposableProbe
+{
+    public int ConstructedCount;
+    public int DisposedCount;
+}
+
+public sealed class DisposableCustomPublisher : IPublisher, IDisposable
+{
+    private readonly DisposableProbe _probe;
+
+    public DisposableCustomPublisher(DisposableProbe probe)
+    {
+        _probe = probe;
+        _probe.ConstructedCount++;
+    }
+
+    public Task PublishAsync(INotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public void Dispose() => _probe.DisposedCount++;
 }
 
 public sealed record SomeNotification : INotification;
