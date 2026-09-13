@@ -407,6 +407,34 @@ public class NotificationHandlersTests
     }
 
     [Fact]
+    public async Task GivenRetainedEntryOptions_WhenDecoratorAddedAfterBuildServiceProvider_ThenBuiltProviderPipelineUnaffected()
+    {
+        // Given
+        NotificationHandlerEntryOptions<SomeNotification>? retainedEntryOptions = null;
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            // Pre-registered so that, if this snapshot fix regresses, the decorator would
+            // actually run (and log) instead of the test passing only because it's unregistered
+            // in DI.
+            .AddTransient<LoggingNotificationDecorator>()
+            .AddSendrNotification()
+            .AddNotificationHandler<SomeNotification>(x => x.Handler.Sequence
+                .With<FirstNotificationHandler>(h => retainedEntryOptions = h))
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+        collector.LogCollection.Clear();
+
+        // When
+        retainedEntryOptions!.Decorator.With<LoggingNotificationDecorator>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+
+        // Then
+        Assert.Equal(["First"], collector.LogCollection);
+    }
+
+    [Fact]
     public async Task GivenIPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
     {
         // Given
