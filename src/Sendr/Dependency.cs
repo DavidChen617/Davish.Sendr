@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Davish.Sendr.Implements;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -14,21 +15,38 @@ public static class Dependency
     /// resolve — otherwise the handler (already built via <c>ActivatorUtilities.CreateInstance</c>,
     /// so the container never captured it on its own) would never get disposed at all, since the
     /// registration's factory never returns anything for the container to track when it throws.
+    /// Always throws: <paramref name="originalException"/> rethrown as itself if cleanup succeeds,
+    /// or both combined into an <see cref="AggregateException"/> if cleanup also fails — a bare
+    /// <c>throw;</c> after calling this would otherwise never run if disposal itself threw first,
+    /// silently discarding the original decorator-construction failure and leaving only the
+    /// secondary cleanup failure for the caller to see.
     /// </summary>
-    private static void DisposeOnFailure(object? handler)
+    private static void DisposeOnFailure(object? handler, Exception originalException)
     {
-        switch (handler)
+        try
         {
-            case IAsyncDisposable asyncDisposable:
-                // No async-returning factory overload exists for this DI registration shape, so
-                // this rare failure path (a decorator's own constructor throwing) blocks rather
-                // than leaking the handler.
-                asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                break;
-            case IDisposable disposable:
-                disposable.Dispose();
-                break;
+            switch (handler)
+            {
+                case IAsyncDisposable asyncDisposable:
+                    // No async-returning factory overload exists for this DI registration shape,
+                    // so this rare failure path (a decorator's own constructor throwing) blocks
+                    // rather than leaking the handler.
+                    asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                    break;
+                case IDisposable disposable:
+                    disposable.Dispose();
+                    break;
+            }
         }
+        catch (Exception cleanupException)
+        {
+            throw new AggregateException(
+                "The decorator pipeline failed to construct, and cleaning up the " +
+                "already-constructed handler also failed. See the inner exceptions for both.",
+                originalException, cleanupException);
+        }
+
+        ExceptionDispatchInfo.Capture(originalException).Throw();
     }
 
     extension(IServiceCollection services)
@@ -127,10 +145,9 @@ public static class Dependency
                         handler = new DecoratorHandler<TRequest, TResponse>(decorator, handler);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    DisposeOnFailure(handler);
-                    throw;
+                    DisposeOnFailure(handler, ex);
                 }
 
                 return handler;
@@ -185,10 +202,9 @@ public static class Dependency
                         handler = new DecoratorHandler<TRequest>(decorator, handler);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    DisposeOnFailure(handler);
-                    throw;
+                    DisposeOnFailure(handler, ex);
                 }
 
                 return handler;
@@ -244,10 +260,9 @@ public static class Dependency
                         handler = new StreamDecoratorHandler<TRequest, TResponse>(decorator, handler);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    DisposeOnFailure(handler);
-                    throw;
+                    DisposeOnFailure(handler, ex);
                 }
 
                 return handler;
@@ -302,10 +317,9 @@ public static class Dependency
                         handler = new CommandDecoratorHandler<TCommand>(decorator, handler);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    DisposeOnFailure(handler);
-                    throw;
+                    DisposeOnFailure(handler, ex);
                 }
 
                 return handler;
@@ -361,10 +375,9 @@ public static class Dependency
                         handler = new CommandDecoratorHandler<TCommand, TResponse>(decorator, handler);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    DisposeOnFailure(handler);
-                    throw;
+                    DisposeOnFailure(handler, ex);
                 }
 
                 return handler;
@@ -420,10 +433,9 @@ public static class Dependency
                         handler = new QueryDecoratorHandler<TQuery, TResponse>(decorator, handler);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    DisposeOnFailure(handler);
-                    throw;
+                    DisposeOnFailure(handler, ex);
                 }
 
                 return handler;

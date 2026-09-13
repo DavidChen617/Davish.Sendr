@@ -374,6 +374,48 @@ public class SendrTests
     }
 
     [Fact]
+    public async Task GivenDecoratorConstructorThrowsAndHandlerCleanupAlsoThrows_WhenSendAsync_ThenBothFailuresRemainObservable()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, ThrowsOnDisposeCommandHandler>(x =>
+                x.Decorator.With<ThrowingConstructorDecorator>())
+            .BuildServiceProvider();
+        var sender = provider.GetRequiredService<ISender>();
+
+        // When
+        var thrown = await Record.ExceptionAsync(() => sender.SendAsync(new SomeCommand(), default));
+
+        // Then
+        // No single wrapping shape is mandated (AggregateException, InnerException chain, or
+        // otherwise) — only that neither failure silently disappears. Before this fix, the
+        // decorator construction failure (why cleanup was even attempted) was lost entirely
+        // whenever DisposeOnFailure's own cleanup attempt also threw, leaving only the secondary
+        // cleanup exception for the caller to see.
+        var allExceptions = FlattenExceptions(thrown!).ToList();
+        Assert.Contains(allExceptions, e => e is InvalidOperationException { Message: "decorator ctor failed" });
+        Assert.Contains(allExceptions, e => e is ApplicationException { Message: "secondary cleanup failure" });
+    }
+
+    private static IEnumerable<Exception> FlattenExceptions(Exception exception)
+    {
+        yield return exception;
+
+        if (exception is AggregateException aggregate)
+        {
+            foreach (var inner in aggregate.InnerExceptions)
+                foreach (var flattened in FlattenExceptions(inner))
+                    yield return flattened;
+        }
+        else if (exception.InnerException is not null)
+        {
+            foreach (var flattened in FlattenExceptions(exception.InnerException))
+                yield return flattened;
+        }
+    }
+
+    [Fact]
     public async Task GivenDisposableQueryHandlerWithDecorator_WhenScopeEnds_ThenDisposedExactlyOnce()
     {
         // Given
@@ -559,6 +601,13 @@ public sealed class AsyncOnlyDisposableCommandHandler : IRequestHandler<SomeComm
     public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class ThrowsOnDisposeCommandHandler : IRequestHandler<SomeCommand>, IDisposable
+{
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public void Dispose() => throw new ApplicationException("secondary cleanup failure");
 }
 
 public sealed class CallCounter
