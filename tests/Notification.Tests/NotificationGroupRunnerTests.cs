@@ -220,4 +220,23 @@ public class NotificationGroupRunnerTests
         Assert.Contains(first, aggregate.InnerExceptions);
         Assert.Contains(second, aggregate.InnerExceptions);
     }
+
+    [Fact]
+    public async Task GivenSequenceStepClearsParallelListSynchronously_WhenRunBoth_ThenParallelStepStillRuns()
+    {
+        // Given
+        var ran = false;
+        var parallelSteps = new List<Func<CancellationToken, Task>> { _ => { ran = true; return Task.CompletedTask; } };
+        // Completes synchronously (no real await inside), so calling CollectSequenceExceptionsAsync
+        // for this step can run to completion before RunBothAsync's next line ever executes —
+        // exactly the condition that let Parallel's own snapshot happen too late, after this
+        // mutation, before the fix.
+        List<Func<CancellationToken, Task>> sequenceSteps = [_ => { parallelSteps.Clear(); return Task.CompletedTask; }];
+
+        // When
+        await NotificationGroupRunner.RunBothAsync(sequenceSteps, parallelSteps, default);
+
+        // Then
+        Assert.True(ran);
+    }
 }

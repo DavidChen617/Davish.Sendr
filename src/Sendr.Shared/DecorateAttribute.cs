@@ -6,9 +6,10 @@ namespace Davish.Sendr;
 /// with the given decorator(s) when <c>AddSendrGenerated</c> composes its pipeline, for example
 /// <c>[Decorate&lt;TransactionDecorator, LoggingDecorator&gt;]</c>. Type arguments are applied
 /// outer to inner — the first one runs first, matching <c>x.Decorator.With&lt;T&gt;()</c>
-/// ordering — and each must implement <see cref="IRequestDecorator"/>,
-/// <see cref="IRequestDecorator.WithResponse"/>, or <see cref="IStreamRequestDecorator"/> as
-/// appropriate for the handler being decorated. Apply at most one <c>[Decorate&lt;...&gt;]</c>
+/// ordering — and each must implement <c>IRequestDecorator</c>, <c>IRequestDecorator.WithResponse</c>,
+/// or <c>IStreamRequestDecorator</c> as appropriate for the handler being decorated (defined in
+/// Davish.Sendr.Abstractions, which this shared project doesn't reference, hence plain <c>&lt;c&gt;</c>
+/// text here instead of a resolvable <c>cref</c>). Apply at most one <c>[Decorate&lt;...&gt;]</c>
 /// per class; pick the overload with the arity you need (1 through 8).
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]

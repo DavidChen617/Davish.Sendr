@@ -374,6 +374,48 @@ public class SendrTests
     }
 
     [Fact]
+    public async Task GivenDecoratorConstructorThrowsAndHandlerCleanupAlsoThrows_WhenSendAsync_ThenBothFailuresRemainObservable()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddSendr()
+            .AddRequestHandler<SomeCommand, ThrowsOnDisposeCommandHandler>(x =>
+                x.Decorator.With<ThrowingConstructorDecorator>())
+            .BuildServiceProvider();
+        var sender = provider.GetRequiredService<ISender>();
+
+        // When
+        var thrown = await Record.ExceptionAsync(() => sender.SendAsync(new SomeCommand(), default));
+
+        // Then
+        // No single wrapping shape is mandated (AggregateException, InnerException chain, or
+        // otherwise) — only that neither failure silently disappears. Before this fix, the
+        // decorator construction failure (why cleanup was even attempted) was lost entirely
+        // whenever DisposeOnFailure's own cleanup attempt also threw, leaving only the secondary
+        // cleanup exception for the caller to see.
+        var allExceptions = FlattenExceptions(thrown!).ToList();
+        Assert.Contains(allExceptions, e => e is InvalidOperationException { Message: "decorator ctor failed" });
+        Assert.Contains(allExceptions, e => e is ApplicationException { Message: "secondary cleanup failure" });
+    }
+
+    private static IEnumerable<Exception> FlattenExceptions(Exception exception)
+    {
+        yield return exception;
+
+        if (exception is AggregateException aggregate)
+        {
+            foreach (var inner in aggregate.InnerExceptions)
+                foreach (var flattened in FlattenExceptions(inner))
+                    yield return flattened;
+        }
+        else if (exception.InnerException is not null)
+        {
+            foreach (var flattened in FlattenExceptions(exception.InnerException))
+                yield return flattened;
+        }
+    }
+
+    [Fact]
     public async Task GivenDisposableQueryHandlerWithDecorator_WhenScopeEnds_ThenDisposedExactlyOnce()
     {
         // Given
@@ -459,6 +501,87 @@ public class SendrTests
         // Then
         Assert.Equal(0, counter.Count);
     }
+
+    [Fact]
+    public async Task GivenDisposableCustomSender_WhenScopeResolvesOnlyISender_ThenDisposedExactlyOnce()
+    {
+        // Given
+        var probe = new DisposableProbe();
+        var provider = new ServiceCollection()
+            .AddSingleton(probe)
+            .AddSendr(o => o.UseSender<DisposableCustomSender>())
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            _ = scope.ServiceProvider.GetRequiredService<ISender>();
+            Assert.Equal(1, probe.ConstructedCount);
+        }
+
+        // Then
+        Assert.Equal(1, probe.DisposedCount);
+    }
+
+    [Fact]
+    public async Task GivenDisposableCustomSender_WhenScopeResolvesBothISenderAndIStreamSender_ThenDisposedTwice()
+    {
+        // Given
+        // Documents a residual, not a full fix: ISender and IStreamSender are two distinct DI
+        // registrations that both resolve to the same TSender instance within a scope (verified
+        // by ConstructedCount staying at 1). The container captures a disposable for disposal
+        // once per registration whose factory returns it, regardless of shared identity, so
+        // resolving both interfaces still means two Dispose calls on the one instance — down
+        // from three before this fix (which also captured a separate, redundant TSender
+        // registration). A custom ISender/IStreamSender implementation should make its disposal
+        // idempotent if it's disposable, as documented on SendrOptions.UseSender.
+        var probe = new DisposableProbe();
+        var provider = new ServiceCollection()
+            .AddSingleton(probe)
+            .AddSendr(o => o.UseSender<DisposableCustomSender>())
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            _ = scope.ServiceProvider.GetRequiredService<ISender>();
+            _ = scope.ServiceProvider.GetRequiredService<IStreamSender>();
+            Assert.Equal(1, probe.ConstructedCount);
+        }
+
+        // Then
+        Assert.Equal(2, probe.DisposedCount);
+    }
+}
+
+public sealed class DisposableCustomSender : ISender, IDisposable
+{
+    private readonly DisposableProbe _probe;
+
+    public DisposableCustomSender(DisposableProbe probe)
+    {
+        _probe = probe;
+        _probe.ConstructedCount++;
+    }
+
+    public Task SendAsync(IRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<TResponse> SendAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken)
+        => Task.FromResult<TResponse>(default!);
+
+    public Task SendAsync(ICommand command, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<TResponse> SendAsync<TResponse>(ICommand<TResponse> command, CancellationToken cancellationToken)
+        => Task.FromResult<TResponse>(default!);
+
+    public Task<TResponse> SendAsync<TResponse>(IQuery<TResponse> query, CancellationToken cancellationToken)
+        => Task.FromResult<TResponse>(default!);
+
+    public IAsyncEnumerable<TResponse> SendStream<TResponse>(
+        IStreamRequest<TResponse> request, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
+
+    public void Dispose() => _probe.DisposedCount++;
 }
 
 public sealed class DisposableCommandHandler : IRequestHandler<SomeCommand>, IDisposable
@@ -478,6 +601,13 @@ public sealed class AsyncOnlyDisposableCommandHandler : IRequestHandler<SomeComm
     public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class ThrowsOnDisposeCommandHandler : IRequestHandler<SomeCommand>, IDisposable
+{
+    public Task HandleAsync(SomeCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public void Dispose() => throw new ApplicationException("secondary cleanup failure");
 }
 
 public sealed class CallCounter

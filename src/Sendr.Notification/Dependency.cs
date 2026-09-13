@@ -31,8 +31,13 @@ public static class NotificationDependency
             if (!options.HasCustomPublisher)
             {
                 services.AddSingleton<NotificationHandlersRegistry>();
-                services.AddScoped<Publisher>();
-                services.AddScoped<IPublisher>(sp => sp.GetRequiredService<Publisher>());
+
+                // Constructed here rather than via a separate services.AddScoped<Publisher>()
+                // registration also resolved via GetRequiredService — see NotificationOptions.
+                // UsePublisher for why: a second registration whose factory also returns the
+                // same disposable instance would mean the container captures it for disposal
+                // twice instead of once.
+                services.AddScoped<IPublisher>(sp => ActivatorUtilities.CreateInstance<Publisher>(sp));
             }
 
             return services;
@@ -115,14 +120,22 @@ public sealed class NotificationHandlerOptions<TNotification>
     {
         HandlerTypes.Add(typeof(THandler));
 
-        foreach (var decoratorType in decorators)
+        // Snapshotted for the same reason AddNotificationHandler snapshots SequenceSteps/
+        // ParallelSteps into arrays: the closure below runs on every future dispatch, not just
+        // once now, and `decorators` is the entry's own live, mutable Stack<Type> (from
+        // NotificationHandlerEntryOptions) — freezing the group's step *list* doesn't help if an
+        // individual entry already in that list can still grow its own decorator chain after
+        // BuildServiceProvider() through a retained NotificationHandlerEntryOptions reference.
+        var decoratorsSnapshot = decorators.ToArray();
+
+        foreach (var decoratorType in decoratorsSnapshot)
             DecoratorTypes.Add(decoratorType);
 
         return (sp, notification, cancellationToken) =>
         {
             INotificationHandler<TNotification> handler = sp.GetRequiredService<THandler>();
 
-            foreach (var decoratorType in decorators)
+            foreach (var decoratorType in decoratorsSnapshot)
             {
                 var decorator = (INotificationDecorator)sp.GetRequiredService(decoratorType);
                 handler = new NotificationDecoratorHandler<TNotification>(decorator, handler);

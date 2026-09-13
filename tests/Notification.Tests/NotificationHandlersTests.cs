@@ -407,6 +407,34 @@ public class NotificationHandlersTests
     }
 
     [Fact]
+    public async Task GivenRetainedEntryOptions_WhenDecoratorAddedAfterBuildServiceProvider_ThenBuiltProviderPipelineUnaffected()
+    {
+        // Given
+        NotificationHandlerEntryOptions<SomeNotification>? retainedEntryOptions = null;
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            // Pre-registered so that, if this snapshot fix regresses, the decorator would
+            // actually run (and log) instead of the test passing only because it's unregistered
+            // in DI.
+            .AddTransient<LoggingNotificationDecorator>()
+            .AddSendrNotification()
+            .AddNotificationHandler<SomeNotification>(x => x.Handler.Sequence
+                .With<FirstNotificationHandler>(h => retainedEntryOptions = h))
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+        collector.LogCollection.Clear();
+
+        // When
+        retainedEntryOptions!.Decorator.With<LoggingNotificationDecorator>();
+        await publisher.PublishAsync(new SomeNotification(), default);
+
+        // Then
+        Assert.Equal(["First"], collector.LogCollection);
+    }
+
+    [Fact]
     public async Task GivenIPublisher_WhenPublishNullNotification_ThenThrowsArgumentNullException()
     {
         // Given
@@ -420,11 +448,53 @@ public class NotificationHandlersTests
             () => publisher.PublishAsync(null!, default));
         Assert.Equal("notification", exception.ParamName);
     }
+
+    [Fact]
+    public async Task GivenDisposableCustomPublisher_WhenScopeResolvesIPublisher_ThenDisposedExactlyOnce()
+    {
+        // Given
+        var probe = new DisposableProbe();
+        var provider = new ServiceCollection()
+            .AddSingleton(probe)
+            .AddSendrNotification(o => o.UsePublisher<DisposableCustomPublisher>())
+            .BuildServiceProvider();
+
+        // When
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            _ = scope.ServiceProvider.GetRequiredService<IPublisher>();
+            Assert.Equal(1, probe.ConstructedCount);
+        }
+
+        // Then
+        Assert.Equal(1, probe.DisposedCount);
+    }
 }
 
 public class LogCollector
 {
     public readonly List<string> LogCollection = new();
+}
+
+public sealed class DisposableProbe
+{
+    public int ConstructedCount;
+    public int DisposedCount;
+}
+
+public sealed class DisposableCustomPublisher : IPublisher, IDisposable
+{
+    private readonly DisposableProbe _probe;
+
+    public DisposableCustomPublisher(DisposableProbe probe)
+    {
+        _probe = probe;
+        _probe.ConstructedCount++;
+    }
+
+    public Task PublishAsync(INotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public void Dispose() => _probe.DisposedCount++;
 }
 
 public sealed record SomeNotification : INotification;

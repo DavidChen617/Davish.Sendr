@@ -50,8 +50,19 @@ public static class NotificationGroupRunner
         IReadOnlyList<Func<CancellationToken, Task>> parallelSteps,
         CancellationToken cancellationToken)
     {
-        var sequenceTask = CollectSequenceExceptionsAsync(sequenceSteps, cancellationToken);
-        var parallelTask = CollectParallelExceptionsAsync(parallelSteps, cancellationToken);
+        // Snapshotted together, synchronously, before either group starts running. Calling an
+        // async method runs its body synchronously up to its first genuine suspension point —
+        // if Sequence's only step completes synchronously (a real possibility: awaiting an
+        // already-completed Task doesn't suspend either), CollectSequenceExceptionsAsync can run
+        // to completion before this method's next line ever executes. Without snapshotting here
+        // first, CollectParallelExceptionsAsync would take its own snapshot only once it actually
+        // starts — which could be after whatever Sequence's synchronous portion already did,
+        // including mutating the very list Parallel is about to iterate.
+        var sequenceSnapshot = sequenceSteps.ToArray();
+        var parallelSnapshot = parallelSteps.ToArray();
+
+        var sequenceTask = CollectSequenceExceptionsAsync(sequenceSnapshot, cancellationToken);
+        var parallelTask = CollectParallelExceptionsAsync(parallelSnapshot, cancellationToken);
 
         // Collected as raw lists, never thrown-then-caught-then-reassembled in between: combining
         // Sequence's and Parallel's failures used to mean throwing each group's own
