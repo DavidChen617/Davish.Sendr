@@ -89,7 +89,7 @@ public class DecoratorBenchmark
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
-        // [Decorate<...>] bakes the decorator set into the handler class, so the generated
+        // [DecorateWith<...>] bakes the decorator set into the handler class, so the generated
         // one-/two-decorator comparison needs its own request/handler pairs (see below).
         _generatedSender = new ServiceCollection()
             .AddSendr(o => o.UseGenerators())
@@ -329,13 +329,13 @@ public sealed class SenderCall_StreamLoggingDecorator : IStreamRequestDecorator
     }
 }
 
-// [Decorate<...>] bakes its decorator set into the handler class, so the generated-sender
+// [DecorateWith<...>] bakes its decorator set into the handler class, so the generated-sender
 // decorator benchmarks need their own request/handler pairs (one per decorator count) rather
 // than reusing SenderCall_Query/SenderCall_Command with different registration-time configs.
 
 public sealed record GenBench_OneDecoratorQuery : IRequest<SenderCall_QueryDto>;
 
-[Decorate<SenderCall_LoggingDecorator>]
+[DecorateWith<SenderCall_LoggingDecorator>]
 public sealed class GenBench_OneDecoratorQueryHandler : IRequestHandler<GenBench_OneDecoratorQuery, SenderCall_QueryDto>
 {
     public Task<SenderCall_QueryDto> HandleAsync(GenBench_OneDecoratorQuery request, CancellationToken cancellationToken) =>
@@ -344,7 +344,7 @@ public sealed class GenBench_OneDecoratorQueryHandler : IRequestHandler<GenBench
 
 public sealed record GenBench_TwoDecoratorQuery : IRequest<SenderCall_QueryDto>;
 
-[Decorate<SenderCall_TransactionDecorator, SenderCall_LoggingDecorator>]
+[DecorateWith<SenderCall_TransactionDecorator, SenderCall_LoggingDecorator>]
 public sealed class GenBench_TwoDecoratorQueryHandler : IRequestHandler<GenBench_TwoDecoratorQuery, SenderCall_QueryDto>
 {
     public Task<SenderCall_QueryDto> HandleAsync(GenBench_TwoDecoratorQuery request, CancellationToken cancellationToken) =>
@@ -353,7 +353,7 @@ public sealed class GenBench_TwoDecoratorQueryHandler : IRequestHandler<GenBench
 
 public sealed record GenBench_OneDecoratorCommand : IRequest;
 
-[Decorate<SenderCall_LoggingDecorator>]
+[DecorateWith<SenderCall_LoggingDecorator>]
 public sealed class GenBench_OneDecoratorCommandHandler : IRequestHandler<GenBench_OneDecoratorCommand>
 {
     public Task HandleAsync(GenBench_OneDecoratorCommand request, CancellationToken cancellationToken) =>
@@ -362,7 +362,7 @@ public sealed class GenBench_OneDecoratorCommandHandler : IRequestHandler<GenBen
 
 public sealed record GenBench_TwoDecoratorCommand : IRequest;
 
-[Decorate<SenderCall_TransactionDecorator, SenderCall_LoggingDecorator>]
+[DecorateWith<SenderCall_TransactionDecorator, SenderCall_LoggingDecorator>]
 public sealed class GenBench_TwoDecoratorCommandHandler : IRequestHandler<GenBench_TwoDecoratorCommand>
 {
     public Task HandleAsync(GenBench_TwoDecoratorCommand request, CancellationToken cancellationToken) =>
@@ -371,7 +371,7 @@ public sealed class GenBench_TwoDecoratorCommandHandler : IRequestHandler<GenBen
 
 public sealed record GenBench_StreamQuery : IStreamRequest<SenderCall_StreamDto>;
 
-[Decorate<SenderCall_StreamLoggingDecorator>]
+[DecorateWith<SenderCall_StreamLoggingDecorator>]
 public sealed class GenBench_StreamHandler : IStreamRequestHandler<GenBench_StreamQuery, SenderCall_StreamDto>
 {
     public async IAsyncEnumerable<SenderCall_StreamDto> HandleAsync(

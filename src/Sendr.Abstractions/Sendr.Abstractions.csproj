@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Davish.Sendr.Abstractions</PackageId>
     <AssemblyName>Davish.Sendr.Abstractions</AssemblyName>
-    <Version>3.3.0</Version>
+    <Version>4.0.0</Version>
     <Description>Abstractions (contracts) for Davish.Sendr — IRequest, IRequestHandler, IRequestDecorator, ISender, ICommand, IQuery, INotification, INotificationHandler, INotificationDecorator, IPublisher.</Description>
   </PropertyGroup>
 

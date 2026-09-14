@@ -216,10 +216,10 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 builder.Services.AddSendr(o => o.UseGenerators());
 ```
 
-Decorators are declared on the handler with `[Decorate<...>]` instead of a fluent `configure` callback. Type arguments run outer to inner — the first one runs first, matching `x.Decorator.With<T>()` ordering:
+Decorators are declared on the handler with `[DecorateWith<...>]` instead of a fluent `configure` callback. Type arguments run outer to inner — the first one runs first, matching `x.Decorator.With<T>()` ordering:
 
 ```csharp
-[Decorate<TransactionDecorator, LoggingDecorator>]
+[DecorateWith<TransactionDecorator, LoggingDecorator>]
 public sealed class GetOrderHandler : IRequestHandler<GetOrder, OrderDto>
 {
     public Task<OrderDto> HandleAsync(GetOrder request, CancellationToken cancellationToken) { /* ... */ }
@@ -230,13 +230,13 @@ Notes:
 
 - This is purely additive — `AddSendr()` without `UseGenerators()` keeps registering the default reflection-based sender unchanged.
 - `o.UseGenerators()` and manual `AddRequestHandler`/`AddStreamRequestHandler` calls don't mix for the *same* request type: once `UseGenerators()` installs the generated sender, dispatch only knows about handlers discovered at compile time. Use `SendrOptions.UseSender<TSender>()` directly if you ever need to plug in your own sender implementation the same way.
-- `[Decorate<...>]` comes in arities 1 through 8; apply at most one per handler class.
+- `[DecorateWith<...>]` comes in arities 1 through 8; apply at most one per handler class.
 - Handler classes and records are both discovered — not just `class`.
 - A handler declared as `struct`/`record struct` is a compile error (`SENDR004`), since handler resolution (generated or manual) requires a reference type; use `class`/`record class` instead.
 - Generic (open) handler classes aren't discovered — register those manually with `AddRequestHandler`/`AddStreamRequestHandler` (without `UseGenerators()`).
 - A handler only counts if it's declared in the *same project* that calls `UseGenerators()`. This is a Roslyn source generator limitation, not a Sendr-specific one: an incremental generator only ever sees its own compilation's syntax trees, never the already-compiled output of a referenced project — so a handler that lives in a library referenced via `ProjectReference` (or a NuGet package) is invisible to the generator even though it compiles and links fine. Either declare handlers directly in the project that calls `UseGenerators()`, or register that library's handlers manually with `AddRequestHandler`/etc. instead.
 - A duplicate handler for the same request/response pair is a compile error (`SENDR002`), not a silent pick. A request type implementing `IRequest<TResponse>` (or `ICommand<TResponse>`/`IQuery<TResponse>`/`IStreamRequest<TResponse>`) for more than one `TResponse` is not a duplicate — each `TResponse` gets its own handler slot.
-- `ICommandHandler`/`IQueryHandler` are discovered the same way — `[Decorate<...>]` on a command/query handler validates against `ICommandDecorator`/`IQueryDecorator` instead.
+- `ICommandHandler`/`IQueryHandler` are discovered the same way — `[DecorateWith<...>]` on a command/query handler validates against `ICommandDecorator`/`IQueryDecorator` instead.
 - `INotificationHandler` is covered too — see [Notification: source-generated registration](#notification-source-generated-registration-opt-in) below, since it plugs into `AddSendrNotification` rather than `AddSendr`.
 
 ## Streams
@@ -387,10 +387,10 @@ builder.Services.AddSendrNotification(o => o.UseGenerators());
 builder.Services.AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel)));
 ```
 
-Decorators are declared with `[Decorate<...>]` the same way, validated against `INotificationDecorator`:
+Decorators are declared with `[DecorateWith<...>]` the same way, validated against `INotificationDecorator`:
 
 ```csharp
-[Decorate<LoggingNotificationDecorator>]
+[DecorateWith<LoggingNotificationDecorator>]
 public sealed class ReserveInventoryHandler : INotificationHandler<OrderPlaced>
 {
     public Task HandleAsync(OrderPlaced notification, CancellationToken cancellationToken) { /* ... */ }

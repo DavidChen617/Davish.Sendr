@@ -25,7 +25,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     private const string QueryHandlerMetadataName = "Davish.Sendr.IQueryHandler`2";
     private const string NotificationHandlerMetadataName = "Davish.Sendr.INotificationHandler`1";
     private const string DecorateAttributeNamespace = "Davish.Sendr";
-    private const string DecorateAttributeName = "DecorateAttribute";
+    private const string DecorateAttributeName = "DecorateWithAttribute";
     private const string RequestDecoratorMetadataName = "Davish.Sendr.IRequestDecorator";
     private const string RequestDecoratorWithResponseMetadataName = "Davish.Sendr.IRequestDecorator+WithResponse";
     private const string StreamDecoratorMetadataName = "Davish.Sendr.IStreamRequestDecorator";
@@ -175,8 +175,8 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// A <c>[Decorate&lt;T1, ..., Tn&gt;]</c> attribute is one of the eight generic
-    /// <c>Davish.Sendr.DecorateAttribute</c> arities — matched by name/namespace/arity rather
+    /// A <c>[DecorateWith&lt;T1, ..., Tn&gt;]</c> attribute is one of the eight generic
+    /// <c>Davish.Sendr.DecorateWithAttribute</c> arities — matched by name/namespace/arity rather
     /// than by resolving all eight metadata names up front.
     /// </summary>
     private static bool IsDecorateAttribute(INamedTypeSymbol attributeClass)
@@ -209,8 +209,8 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
                     ? syntaxRef.GetSyntax().GetLocation()
                     : classSymbol.Locations.FirstOrDefault();
                 diagnostics.Add(Diagnostic.Create(DiagnosticDescriptors.InvalidDecorator, location,
-                    $"'{classSymbol.ToDisplayString()}' has more than one [Decorate<...>]. " +
-                    "Combine them into a single attribute, e.g. [Decorate<TransactionDecorator, LoggingDecorator>]."));
+                    $"'{classSymbol.ToDisplayString()}' has more than one [DecorateWith<...>]. " +
+                    "Combine them into a single attribute, e.g. [DecorateWith<TransactionDecorator, LoggingDecorator>]."));
             }
 
             return (ImmutableArray<DecoratorRef>.Empty, diagnostics.ToImmutable());
