@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Sendr.Notification\Sendr.Notification.csproj" />
+    <ProjectReference Include="..\..\src\Sendr\Sendr.csproj" />
   </ItemGroup>
 
 </Project>

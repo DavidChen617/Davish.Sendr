@@ -34,13 +34,14 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     private const string QueryDecoratorMetadataName = "Davish.Sendr.IQueryDecorator";
     private const string NotificationDecoratorMetadataName = "Davish.Sendr.INotificationDecorator";
 
-    // Davish.Sendr.Notification.* (IPublisher, NotificationRunMode, NotificationGroupRunner,
-    // NotificationOptions) live in the separate Sendr.Notification package, not
-    // Sendr.Notification.Abstractions. A consumer can implement INotificationHandler<T> (from
-    // Abstractions) without referencing Sendr.Notification proper, so IPublisher's presence is
-    // the actual signal that emitting GeneratedPublisher/NotificationOptionsGeneratedExtensions
-    // is safe — using INotificationHandler`1's presence instead could emit code that fails to
-    // compile in a project that only has Abstractions.
+    // IPublisher's presence (rather than INotificationHandler`1's) is the actual signal that
+    // emitting GeneratedPublisher/NotificationOptionsGeneratedExtensions is safe: the generated
+    // UseGenerators() overload for NotificationOptions references NotificationOptions itself,
+    // which — like SendrOptions for the request/command/query side — lives only in the Sendr
+    // implementation assembly, not Sendr.Abstractions. A consumer could in principle implement
+    // INotificationHandler<T> (from Abstractions) without referencing Sendr proper at all; gating
+    // on IPublisher instead of the handler interface avoids emitting a NotificationOptions
+    // reference into a compilation where that type doesn't exist.
     private const string PublisherMetadataName = "Davish.Sendr.IPublisher";
 
     /// <inheritdoc />
@@ -285,9 +286,9 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             deduped.Add(model);
         }
 
-        // Without Sendr.Notification referenced (IPublisher unresolvable), there is nothing valid
-        // to emit for any discovered notification handler — GeneratedPublisher itself couldn't
-        // compile — so they're dropped rather than passed to SourceBuilder.
+        // Without Sendr referenced (IPublisher unresolvable), there is nothing valid to emit for
+        // any discovered notification handler — GeneratedPublisher itself couldn't compile — so
+        // they're dropped rather than passed to SourceBuilder.
         var models = hasNotificationSupport
             ? deduped.ToImmutable()
             : deduped.Where(m => m.Kind != HandlerKind.Notification).ToImmutableArray();

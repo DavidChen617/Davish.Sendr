@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
-/// Extension methods for registering Sendr.Notification services with an <see cref="IServiceCollection"/>.
+/// Extension methods for registering notification publishing services with an <see cref="IServiceCollection"/>.
 /// </summary>
 public static class NotificationDependency
 {
@@ -19,7 +19,7 @@ public static class NotificationDependency
         /// discover and register handlers at compile time instead.
         /// </summary>
         /// <param name="configure">
-        /// An optional callback to configure Sendr.Notification, such as installing a generated
+        /// An optional callback to configure notification publishing, such as installing a generated
         /// or custom publisher via <see cref="NotificationOptions.UsePublisher{TPublisher}"/>.
         /// </param>
         /// <returns>The same <see cref="IServiceCollection"/> so that calls can be chained.</returns>

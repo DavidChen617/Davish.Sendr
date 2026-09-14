@@ -5,7 +5,6 @@
 *A free, lightweight mediator for .NET — explicit, no assembly scanning.*
 
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.svg)](https://www.nuget.org/packages/Davish.Sendr/)
-[![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.Notification.svg?label=nuget%20%28notification%29)](https://www.nuget.org/packages/Davish.Sendr.Notification/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -22,7 +21,7 @@ Sendr keeps the ergonomics you expect from a mediator — send a request, let a 
 - **Explicit registration** — every handler is registered by hand. No reflection-based assembly scanning, no surprises at startup.
 - **Optional source-generated dispatch** — `Davish.Sendr.Generators` discovers handlers at compile time and installs a reflection-free `ISender`/`IStreamSender`; opt in with `AddSendr(o => o.UseGenerators())`.
 - **Multi-target** — builds for `netstandard2.0` and `net10.0`.
-- **Split packages** — depend only on the abstractions package from your domain layer; request/response and notification each ship as their own pair of packages.
+- **Split packages** — depend only on `Davish.Sendr.Abstractions` from your domain layer; the implementation ships in `Davish.Sendr` alone, request/response and notification together.
 
 > [!NOTE]
 > Unlike scanning-based mediators, Sendr never discovers handlers implicitly. Registration is a compile-time-checked call, so a missing handler is obvious at the composition root.
@@ -39,17 +38,12 @@ The contracts (`IRequest`, `IRequestHandler`, `IRequestDecorator`, `ISender`, �
 dotnet add package Davish.Sendr.Abstractions
 ```
 
-Notification publishing is a separate pair of packages — it doesn't depend on `Davish.Sendr`, so you can add it on its own:
+Notification publishing (`INotification`, `IPublisher`, `AddSendrNotification`, …) ships in these same two packages — no extra package needed.
 
-```bash
-dotnet add package Davish.Sendr.Notification
-dotnet add package Davish.Sendr.Notification.Abstractions
-```
-
-If you want the CQRS naming (`ICommand`, `IQuery`, …) instead of the plain `IRequest` contracts, it's already there — no extra package needed, `ICommand`/`ICommandHandler`/`IQuery`/`IQueryHandler` ship in `Davish.Sendr.Abstractions` itself.
+If you want the CQRS naming (`ICommand`, `IQuery`, …) instead of the plain `IRequest` contracts, it's already there too — `ICommand`/`ICommandHandler`/`IQuery`/`IQueryHandler` ship in `Davish.Sendr.Abstractions` itself.
 
 > [!NOTE]
-> `Davish.Sendr.Message` is deprecated — those types used to live there. The package still resolves (it now just references `Davish.Sendr.Abstractions`), so existing references keep compiling, but new projects should reference `Davish.Sendr.Abstractions`/`Davish.Sendr` directly instead.
+> `Davish.Sendr.Message` and `Davish.Sendr.Notification`/`Davish.Sendr.Notification.Abstractions` are deprecated — those types used to live there. The packages still resolve (they now just reference `Davish.Sendr.Abstractions`/`Davish.Sendr`), so existing references keep compiling, but new projects should reference `Davish.Sendr.Abstractions`/`Davish.Sendr` directly instead.
 
 Compile-time handler discovery and dispatch (opt-in — see [Source-generated registration](#source-generated-registration-opt-in)):
 
@@ -214,7 +208,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 `Davish.Sendr.Generators` discovers your `IRequestHandler`/`IStreamRequestHandler` implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr` and replaces every manual `AddRequestHandler`/`AddStreamRequestHandler` call, backed by a reflection-free `ISender`/`IStreamSender` — dispatch is a compile-time-built `Dictionary<Type, Func<...>>` lookup, not `MakeGenericType` + compiled expression trees.
 
 ```xml
-<PackageReference Include="Davish.Sendr" Version="3.2.3" />
+<PackageReference Include="Davish.Sendr" Version="3.3.0" />
 <PackageReference Include="Davish.Sendr.Generators" Version="1.1.5" PrivateAssets="all" />
 ```
 
