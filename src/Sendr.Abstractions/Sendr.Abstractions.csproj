@@ -3,16 +3,26 @@
   <PropertyGroup>
     <PackageId>Davish.Sendr.Abstractions</PackageId>
     <AssemblyName>Davish.Sendr.Abstractions</AssemblyName>
-    <Version>3.2.0</Version>
-    <Description>Abstractions (contracts) for Davish.Sendr — IRequest, IRequestHandler, IRequestDecorator, ISender, ICommand, IQuery.</Description>
+    <Version>3.3.0</Version>
+    <Description>Abstractions (contracts) for Davish.Sendr — IRequest, IRequestHandler, IRequestDecorator, ISender, ICommand, IQuery, INotification, INotificationHandler, INotificationDecorator, IPublisher.</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sendr.Shared\Sendr.Shared.csproj" />
+    <ProjectReference Include="..\Sendr.Shared\Sendr.Shared.csproj" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="[10.0.0, )" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeReferencedProjectInPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="IncludeReferencedProjectInPackage" DependsOnTargets="BuildOnlySettings;ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths-&gt;WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+    </ItemGroup>
+  </Target>
 
 </Project>

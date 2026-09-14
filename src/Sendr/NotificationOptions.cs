@@ -21,7 +21,7 @@ public sealed class NotificationOptions
 
     /// <summary>
     /// Registers <typeparamref name="TPublisher"/> as the <see cref="IPublisher"/>
-    /// implementation, replacing Davish.Sendr.Notification's default reflection-based
+    /// implementation, replacing Sendr's default reflection-based
     /// dispatcher. This is what <c>UseGenerators()</c> (from the <c>Davish.Sendr.Generators</c>
     /// package) calls to install the generated dispatcher; call it directly to plug in any
     /// other implementation of your own.
