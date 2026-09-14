@@ -3,12 +3,22 @@
   <PropertyGroup>
     <PackageId>Davish.Sendr.Notification.Abstractions</PackageId>
     <AssemblyName>Davish.Sendr.Notification.Abstractions</AssemblyName>
-    <Version>2.1.0</Version>
+    <Version>2.1.1</Version>
     <Description>Abstractions (contracts) for Davish.Sendr.Notification — INotification, INotificationHandler, INotificationDecorator, IPublisher.</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sendr.Shared\Sendr.Shared.csproj" />
+    <ProjectReference Include="..\Sendr.Shared\Sendr.Shared.csproj" PrivateAssets="all" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeReferencedProjectInPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="IncludeReferencedProjectInPackage" DependsOnTargets="BuildOnlySettings;ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths-&gt;WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+    </ItemGroup>
+  </Target>
 
 </Project>
