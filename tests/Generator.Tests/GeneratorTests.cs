@@ -431,7 +431,7 @@ public sealed class GenSomeQueryHandler : IRequestHandler<GenSomeQuery, GenSomeD
 
 public sealed record GenDecoratedQuery : IRequest<GenSomeDto>;
 
-[Decorate<LoggingDecorator>]
+[DecorateWith<LoggingDecorator>]
 public sealed class GenDecoratedQueryHandler : IRequestHandler<GenDecoratedQuery, GenSomeDto>
 {
     public Task<GenSomeDto> HandleAsync(GenDecoratedQuery request, CancellationToken cancellationToken)
@@ -440,7 +440,7 @@ public sealed class GenDecoratedQueryHandler : IRequestHandler<GenDecoratedQuery
 
 public sealed record GenMultiDecoratedQuery : IRequest<GenSomeDto>;
 
-[Decorate<TransactionDecorator, LoggingDecorator>]
+[DecorateWith<TransactionDecorator, LoggingDecorator>]
 public sealed class GenMultiDecoratedQueryHandler : IRequestHandler<GenMultiDecoratedQuery, GenSomeDto>
 {
     public Task<GenSomeDto> HandleAsync(GenMultiDecoratedQuery request, CancellationToken cancellationToken)
@@ -449,7 +449,7 @@ public sealed class GenMultiDecoratedQueryHandler : IRequestHandler<GenMultiDeco
 
 public sealed record GenStreamQuery : IStreamRequest<int>;
 
-[Decorate<StreamLoggingDecorator>]
+[DecorateWith<StreamLoggingDecorator>]
 public sealed class GenStreamQueryHandler : IStreamRequestHandler<GenStreamQuery, int>
 {
     public async IAsyncEnumerable<int> HandleAsync(
@@ -558,7 +558,7 @@ public sealed class GenCqrsQueryHandler : IQueryHandler<GenCqrsQuery, GenSomeDto
 
 public sealed record GenDecoratedCqrsCommand : ICommand;
 
-[Decorate<CqrsLoggingDecorator>]
+[DecorateWith<CqrsLoggingDecorator>]
 public sealed class GenDecoratedCqrsCommandHandler(LogCollector collector) : ICommandHandler<GenDecoratedCqrsCommand>
 {
     public Task HandleAsync(GenDecoratedCqrsCommand command, CancellationToken cancellationToken)
@@ -570,7 +570,7 @@ public sealed class GenDecoratedCqrsCommandHandler(LogCollector collector) : ICo
 
 public sealed record GenDecoratedCqrsQuery : IQuery<GenSomeDto>;
 
-[Decorate<CqrsLoggingDecorator>]
+[DecorateWith<CqrsLoggingDecorator>]
 public sealed class GenDecoratedCqrsQueryHandler : IQueryHandler<GenDecoratedCqrsQuery, GenSomeDto>
 {
     public Task<GenSomeDto> HandleAsync(GenDecoratedCqrsQuery query, CancellationToken cancellationToken)
@@ -624,7 +624,7 @@ public sealed class SecondGenNotificationHandler(LogCollector collector) : INoti
 
 public sealed record GenDecoratedNotification : INotification;
 
-[Decorate<NotificationLoggingDecorator>]
+[DecorateWith<NotificationLoggingDecorator>]
 public sealed class GenDecoratedNotificationHandler(LogCollector collector) : INotificationHandler<GenDecoratedNotification>
 {
     public Task HandleAsync(GenDecoratedNotification notification, CancellationToken cancellationToken)

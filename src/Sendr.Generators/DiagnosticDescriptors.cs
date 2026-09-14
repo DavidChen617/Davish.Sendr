@@ -6,7 +6,7 @@ internal static class DiagnosticDescriptors
 {
     public static readonly DiagnosticDescriptor InvalidDecorator = new(
         id: "SENDR001",
-        title: "Invalid [Decorate] usage",
+        title: "Invalid [DecorateWith] usage",
         messageFormat: "{0}",
         category: "Davish.Sendr.Generators",
         defaultSeverity: DiagnosticSeverity.Error,

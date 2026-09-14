@@ -13,7 +13,7 @@
     <NoWarn>$(NoWarn);NU5128;RS2008</NoWarn>
     <PackageId>Davish.Sendr.Generators</PackageId>
     <AssemblyName>Davish.Sendr.Generators</AssemblyName>
-    <Version>1.1.5</Version>
+    <Version>2.0.0</Version>
     <Description>Roslyn incremental source generator for Davish.Sendr — compile-time handler discovery, decorator wiring, and reflection-free dispatch via AddSendrGenerated().</Description>
   </PropertyGroup>
 

@@ -14,7 +14,7 @@ internal enum HandlerKind
 }
 
 /// <summary>
-/// A decorator attached to a handler via <c>[Decorate]</c>, already validated against the
+/// A decorator attached to a handler via <c>[DecorateWith]</c>, already validated against the
 /// decorator interface the handler kind requires.
 /// </summary>
 /// <param name="TypeName">Fully-qualified (global::-prefixed) name of the decorator type.</param>

@@ -81,7 +81,7 @@ internal static class SourceBuilder
         sb.AppendLine("    {");
         sb.AppendLine("        /// <summary>");
         sb.AppendLine("        /// Installs the generated, reflection-free <c>ISender</c>/<c>IStreamSender</c> and registers");
-        sb.AppendLine("        /// every handler (and <c>[Decorate&lt;...&gt;]</c> pipeline) discovered in this compilation.");
+        sb.AppendLine("        /// every handler (and <c>[DecorateWith&lt;...&gt;]</c> pipeline) discovered in this compilation.");
         sb.AppendLine("        /// Call from <c>AddSendr</c>: <c>services.AddSendr(o =&gt; o.UseGenerators())</c>.");
         sb.AppendLine("        /// </summary>");
         sb.AppendLine("        public static global::Davish.Sendr.SendrOptions UseGenerators(this global::Davish.Sendr.SendrOptions options)");
@@ -472,7 +472,7 @@ internal static class SourceBuilder
         sb.AppendLine("    {");
         sb.AppendLine("        /// <summary>");
         sb.AppendLine("        /// Installs the generated, reflection-free <c>IPublisher</c> and registers every handler");
-        sb.AppendLine("        /// (and <c>[Decorate&lt;...&gt;]</c> pipeline) discovered in this compilation. Every");
+        sb.AppendLine("        /// (and <c>[DecorateWith&lt;...&gt;]</c> pipeline) discovered in this compilation. Every");
         sb.AppendLine("        /// notification type may have any number of handlers; among handlers of the same");
         sb.AppendLine("        /// notification, no ordering is guaranteed. Call from <c>AddSendrNotification</c>:");
         sb.AppendLine("        /// <c>services.AddSendrNotification(o =&gt; o.UseGenerators())</c>.");
@@ -515,7 +515,7 @@ internal static class SourceBuilder
     /// <summary>
     /// Wraps <paramref name="innermostCall"/> with the model's decorators, outermost-first,
     /// mirroring the ordering of <c>x.Decorator.With&lt;T&gt;()</c> chains: the first
-    /// <c>[Decorate]</c> declared is the outermost layer and runs first.
+    /// <c>[DecorateWith]</c> declared is the outermost layer and runs first.
     /// </summary>
     private static string BuildComposedCall(HandlerModel model, string innermostCall)
     {
