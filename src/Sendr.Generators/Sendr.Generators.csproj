@@ -7,6 +7,9 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- No traditional lib/ output (IncludeBuildOutput=false) means there's nothing for a
+         symbols package to contain — the .snupkg build fails with NU5017 otherwise. -->
+    <IncludeSymbols>false</IncludeSymbols>
     <NoWarn>$(NoWarn);NU5128;RS2008</NoWarn>
     <PackageId>Davish.Sendr.Generators</PackageId>
     <AssemblyName>Davish.Sendr.Generators</AssemblyName>

@@ -33,6 +33,7 @@ jobs:
           for proj in \
             src/Sendr.Abstractions/Sendr.Abstractions.csproj \
             src/Sendr/Sendr.csproj \
+            src/Sendr.Generators/Sendr.Generators.csproj \
             src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj \
             src/Sendr.Notification/Sendr.Notification.csproj \
             src/Sendr.Message/Sendr.Message.csproj; do
