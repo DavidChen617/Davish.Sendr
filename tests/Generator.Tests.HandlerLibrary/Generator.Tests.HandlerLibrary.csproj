@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Deliberately does NOT reference Davish.Sendr.Generators (as analyzer or otherwise) — this is
+    the "library" side of the cross-assembly source generation integration fixture: a project
+    that only knows about Sendr.Abstractions, whose handlers are only discoverable by the host
+    test project's own generator run via UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sendr.Abstractions\Sendr.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

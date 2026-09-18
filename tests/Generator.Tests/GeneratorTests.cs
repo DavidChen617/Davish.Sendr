@@ -1,4 +1,5 @@
 using Davish.Sendr;
+using Generator.Tests.HandlerLibrary;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Generator.Tests;
@@ -10,7 +11,7 @@ public class GeneratorTests
     {
         // Given
         var provider = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
 
         // When
@@ -26,7 +27,7 @@ public class GeneratorTests
     {
         // Given
         var sender = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
@@ -43,7 +44,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var sender = provider.GetRequiredService<ISender>();
@@ -61,7 +62,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var sender = provider.GetRequiredService<ISender>();
@@ -79,7 +80,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var sender = provider.GetRequiredService<ISender>();
@@ -97,7 +98,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var streamSender = provider.GetRequiredService<IStreamSender>();
@@ -118,7 +119,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var streamSender = provider.GetRequiredService<IStreamSender>();
@@ -136,7 +137,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var sender = provider.GetRequiredService<ISender>();
@@ -153,7 +154,7 @@ public class GeneratorTests
     {
         // Given
         var sender = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
@@ -169,7 +170,7 @@ public class GeneratorTests
     {
         // Given
         var sender = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
@@ -186,7 +187,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var sender = provider.GetRequiredService<ISender>();
@@ -204,7 +205,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var sender = provider.GetRequiredService<ISender>();
@@ -221,7 +222,7 @@ public class GeneratorTests
     {
         // Given
         var provider = new ServiceCollection()
-            .AddSendrNotification(o => o.UseGenerators())
+            .AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
 
         // When
@@ -237,7 +238,7 @@ public class GeneratorTests
     {
         // Given
         var publisher = new ServiceCollection()
-            .AddSendrNotification(o => o.UseGenerators())
+            .AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<IPublisher>();
 
@@ -251,7 +252,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendrNotification(o => o.UseGenerators())
+            .AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var publisher = provider.GetRequiredService<IPublisher>();
@@ -271,7 +272,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel)))
+            .AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel).IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var publisher = provider.GetRequiredService<IPublisher>();
@@ -291,7 +292,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendrNotification(o => o.UseGenerators())
+            .AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var collector = provider.GetRequiredService<LogCollector>();
         var publisher = provider.GetRequiredService<IPublisher>();
@@ -308,7 +309,7 @@ public class GeneratorTests
     {
         // Given
         var sender = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
@@ -319,11 +320,72 @@ public class GeneratorTests
     }
 
     [Fact]
+    public async Task GivenAssemblyIncluded_WhenSendCrossAssemblyQuery_ThenHandlerFromOtherAssemblyRuns()
+    {
+        // Given — ExternalQuery/ExternalQueryHandler live in Generator.Tests.HandlerLibrary, a
+        // separate project whose own build never runs Sendr.Generators; only reachable here
+        // because IncludeAssemblyOf<HandlerLibraryMarker>() names its assembly explicitly.
+        var sender = new ServiceCollection()
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
+            .BuildServiceProvider()
+            .GetRequiredService<ISender>();
+
+        // When
+        var result = await sender.SendAsync(new ExternalQuery(), default);
+
+        // Then
+        Assert.Equal("from-library", result.Value);
+    }
+
+    [Fact]
+    public async Task GivenAssemblyIncluded_WhenSendCrossAssemblyCommand_ThenHandlerFromOtherAssemblyRuns()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<ExternalLogCollector>()
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<ExternalLogCollector>();
+        var sender = provider.GetRequiredService<ISender>();
+
+        // When
+        await sender.SendAsync(new ExternalCommand(), default);
+
+        // Then
+        Assert.Equal(["ExternalCommandHandled"], collector.Log);
+    }
+
+    [Fact]
+    public async Task GivenAssemblyIncludedForNotifications_WhenPublishCrossAssemblyNotification_ThenHandlerFromOtherAssemblyRuns()
+    {
+        // Given
+        var provider = new ServiceCollection()
+            .AddScoped<ExternalLogCollector>()
+            .AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<ExternalLogCollector>();
+        var publisher = provider.GetRequiredService<IPublisher>();
+
+        // When
+        await publisher.PublishAsync(new ExternalNotification(), default);
+
+        // Then
+        Assert.Equal(["ExternalNotificationHandled"], collector.Log);
+    }
+
+    // The negative case — an assembly NOT named via IncludeAssemblyOf<...>() stays undiscovered —
+    // can't be exercised from a ServiceCollection in *this* project: every UseGenerators() call in
+    // one compilation shares this project's single generated dispatch table (see SENDR006), so once
+    // any test here includes HandlerLibraryMarker's assembly, every other call site sees it too.
+    // Covered instead by GeneratorHarnessTests, which builds an isolated host compilation that
+    // references the library without ever calling IncludeAssemblyOf.
+
+    [Fact]
     public async Task GivenNoHandlerDiscoveredForRequest_WhenSend_ThenMessageDoesNotSuggestAddRequestHandler()
     {
         // Given
         var sender = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
@@ -345,7 +407,7 @@ public class GeneratorTests
     {
         // Given
         var publisher = new ServiceCollection()
-            .AddSendrNotification(o => o.UseGenerators())
+            .AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<IPublisher>();
 
@@ -361,7 +423,7 @@ public class GeneratorTests
         // Given
         var provider = new ServiceCollection()
             .AddScoped<LogCollector>()
-            .AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel)))
+            .AddSendrNotification(o => o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel).IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider();
         var publisher = provider.GetRequiredService<IPublisher>();
 
@@ -378,7 +440,7 @@ public class GeneratorTests
     {
         // Given
         var sender = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
@@ -394,7 +456,7 @@ public class GeneratorTests
     {
         // Given
         var sender = new ServiceCollection()
-            .AddSendr(o => o.UseGenerators())
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
             .BuildServiceProvider()
             .GetRequiredService<ISender>();
 
