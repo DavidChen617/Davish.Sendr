@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -22,9 +23,20 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sendr\Sendr.csproj" />
     <ProjectReference Include="..\..\src\Sendr.Shared\Sendr.Shared.csproj" />
+    <!--
+      ReferenceOutputAssembly is true (not just an analyzer) so GeneratorHarnessTests can drive
+      SendrSourceGenerator directly via GeneratorDriver against in-memory compilations, in addition
+      to it running as a real analyzer against this project's own source (which the rest of the
+      tests in this project exercise).
+    -->
     <ProjectReference Include="..\..\src\Sendr.Generators\Sendr.Generators.csproj"
                        OutputItemType="Analyzer"
-                       ReferenceOutputAssembly="false" />
+                       ReferenceOutputAssembly="true" />
+    <!--
+      Deliberately NOT an Analyzer reference — this is the "host" side of the cross-assembly
+      integration fixture, referencing a library whose own build never ran Sendr.Generators.
+    -->
+    <ProjectReference Include="..\Generator.Tests.HandlerLibrary\Generator.Tests.HandlerLibrary.csproj" />
   </ItemGroup>
 
 </Project>

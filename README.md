@@ -234,10 +234,39 @@ Notes:
 - Handler classes and records are both discovered — not just `class`.
 - A handler declared as `struct`/`record struct` is a compile error (`SENDR004`), since handler resolution (generated or manual) requires a reference type; use `class`/`record class` instead.
 - Generic (open) handler classes aren't discovered — register those manually with `AddRequestHandler`/`AddStreamRequestHandler` (without `UseGenerators()`).
-- A handler only counts if it's declared in the *same project* that calls `UseGenerators()`. This is a Roslyn source generator limitation, not a Sendr-specific one: an incremental generator only ever sees its own compilation's syntax trees, never the already-compiled output of a referenced project — so a handler that lives in a library referenced via `ProjectReference` (or a NuGet package) is invisible to the generator even though it compiles and links fine. Either declare handlers directly in the project that calls `UseGenerators()`, or register that library's handlers manually with `AddRequestHandler`/etc. instead.
+- By default, a handler only counts if it's declared in the *same project* that calls `UseGenerators()`: an incremental generator only ever inspects its own compilation's syntax trees, never the already-compiled output of a referenced project, so a handler living in a library referenced via `ProjectReference` (or a NuGet package) is invisible on its own even though it compiles and links fine. Name that library's assembly explicitly with `IncludeAssemblyOf<TMarker>()` (see [Cross-assembly discovery](#cross-assembly-discovery) below) to have the generator walk its metadata too, or register that library's handlers manually with `AddRequestHandler`/etc. instead.
 - A duplicate handler for the same request/response pair is a compile error (`SENDR002`), not a silent pick. A request type implementing `IRequest<TResponse>` (or `ICommand<TResponse>`/`IQuery<TResponse>`/`IStreamRequest<TResponse>`) for more than one `TResponse` is not a duplicate — each `TResponse` gets its own handler slot.
 - `ICommandHandler`/`IQueryHandler` are discovered the same way — `[DecorateWith<...>]` on a command/query handler validates against `ICommandDecorator`/`IQueryDecorator` instead.
 - `INotificationHandler` is covered too — see [Notification: source-generated registration](#notification-source-generated-registration-opt-in) below, since it plugs into `AddSendrNotification` rather than `AddSendr`.
+
+### Cross-assembly discovery
+
+Name another project's assembly explicitly to have the generator discover its handlers too — for example a domain/application layer referenced via `ProjectReference`, whose own build never runs `Davish.Sendr.Generators`:
+
+```csharp
+// Any type declared in the library assembly works as the marker — it doesn't need to
+// implement any particular interface.
+public sealed class ApplicationAssemblyMarker;
+
+builder.Services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<ApplicationAssemblyMarker>()));
+```
+
+`IncludeAssemblyOf<TMarker>()` chains, and combines with more than one assembly:
+
+```csharp
+o.UseGenerators(g => g
+    .IncludeAssemblyOf<ApplicationAssemblyMarker>()
+    .IncludeAssemblyOf<InfrastructureAssemblyMarker>());
+```
+
+Notes:
+
+- This is a compile-time-only declaration read directly from source by the generator — it does not perform any runtime assembly scanning, and it only recognizes a call written directly inline in the `UseGenerators(g => ...)` lambda (a fluent chain, or one call per statement in a block lambda). A delegate variable, method group, loop, conditional, or helper/extension method wrapping the configuration isn't statically resolvable and is a compile error (`SENDR005`).
+- The current project is always included automatically; naming its own assembly again via a local marker is harmless, not an error.
+- Only the assemblies named directly are walked — an included assembly's own further dependencies are not pulled in transitively.
+- A handler discovered this way must be accessible from the calling project: public (including every containing type, for a nested handler), or internal with a matching `[assembly: InternalsVisibleTo("...")]` declared by the library. Otherwise it's a compile error (`SENDR007`) rather than an invisible handler.
+- `ISender`/`IStreamSender` and `IPublisher` each build their own single dispatch table per compilation, from their own `UseGenerators()` call's inclusions — including the same library on both sides (one call for `AddSendr`, one for `AddSendrNotification`) is normal and expected. Every `UseGenerators()` call for the *same* one of those two, however, must declare the same assembly set; two calls that disagree are a compile error (`SENDR006`), since there both share that project's single generated dispatch table.
+- A duplicate handler for the same request/response pair across the current project and an included assembly — or across two included assemblies — is `SENDR002`, the same diagnostic as two handlers declared locally.
 
 ## Streams
 
@@ -402,3 +431,4 @@ Notes:
 - No ordering is guaranteed among handlers of the same notification, whether `Sequence` or `Parallel` — `RunAs` only chooses one-at-a-time vs. concurrent execution, not a priority between handlers.
 - `o.UseGenerators()` and manual `AddNotificationHandler` calls don't mix for the *same* notification type, same as the request-side generator.
 - Exception aggregation (the 0/1/2+ rule described above) is identical to the manual registration path — both call the same `NotificationGroupRunner`.
+- `GeneratedNotificationRunOptions` has its own `IncludeAssemblyOf<TMarker>()`, chainable with `RunAs`, for the same [cross-assembly discovery](#cross-assembly-discovery) described above — `o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel).IncludeAssemblyOf<ApplicationAssemblyMarker>())`. It has its own independent assembly set, so it doesn't need to match whatever `AddSendr`'s `UseGenerators()` declares.

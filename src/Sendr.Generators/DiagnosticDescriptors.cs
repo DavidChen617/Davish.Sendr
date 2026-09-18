@@ -39,4 +39,32 @@ internal static class DiagnosticDescriptors
         category: "Davish.Sendr.Generators",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor UnsupportedGeneratorConfiguration = new(
+        id: "SENDR005",
+        title: "Unsupported UseGenerators() configuration",
+        messageFormat: "{0}",
+        category: "Davish.Sendr.Generators",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor InconsistentGeneratorConfiguration = new(
+        id: "SENDR006",
+        title: "Inconsistent UseGenerators() assembly configuration",
+        messageFormat: "This 'UseGenerators()' call includes a different set of assemblies than another " +
+                        "'UseGenerators()' call for the same {0} in this project. Every call for the same " +
+                        "{0} in one compilation must declare the same 'IncludeAssemblyOf<...>()' set.",
+        category: "Davish.Sendr.Generators",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ExternalHandlerNotAccessible = new(
+        id: "SENDR007",
+        title: "External handler or decorator is not accessible",
+        messageFormat: "'{0}' was discovered in an included assembly but is not accessible from this project. " +
+                        "Make it public (including any containing type), or grant this project access with " +
+                        "[assembly: InternalsVisibleTo(\"...\")] in the library that declares it.",
+        category: "Davish.Sendr.Generators",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

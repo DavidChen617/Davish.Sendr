@@ -41,10 +41,10 @@ internal static class SourceBuilder
         // (SENDR004) or open generic (SENDR003), or it just isn't implemented yet.
         sb.AppendLine("        private static string NotDiscovered(string handlerDescription) =>");
         sb.AppendLine("            $\"Davish.Sendr: no {handlerDescription} was discovered by the source generator. \" +");
-        sb.AppendLine("            \"Make sure the handler is a class or record (not struct/record struct or open generic) \" +");
-        sb.AppendLine("            \"declared in this project's own compilation — the generator can't see a handler from a \" +");
-        sb.AppendLine("            \"referenced project, even via ProjectReference — or register it manually instead of \" +");
-        sb.AppendLine("            \"relying on UseGenerators().\";");
+        sb.AppendLine("            \"Make sure the handler is a class or record (not struct/record struct or open generic), \" +");
+        sb.AppendLine("            \"is accessible from this project, and is either declared in this project's own \" +");
+        sb.AppendLine("            \"compilation or in an assembly named via UseGenerators(g => g.IncludeAssemblyOf<TMarker>()) \" +");
+        sb.AppendLine("            \"— or register it manually instead of relying on UseGenerators().\";");
         sb.AppendLine();
 
         AppendSendAsync(sb, senderModels.Where(m => m.Kind == HandlerKind.Request).ToImmutableArray());
@@ -81,11 +81,21 @@ internal static class SourceBuilder
         sb.AppendLine("    {");
         sb.AppendLine("        /// <summary>");
         sb.AppendLine("        /// Installs the generated, reflection-free <c>ISender</c>/<c>IStreamSender</c> and registers");
-        sb.AppendLine("        /// every handler (and <c>[DecorateWith&lt;...&gt;]</c> pipeline) discovered in this compilation.");
+        sb.AppendLine("        /// every handler (and <c>[DecorateWith&lt;...&gt;]</c> pipeline) discovered in this compilation");
+        sb.AppendLine("        /// and in every assembly named via <c>configure</c>.");
         sb.AppendLine("        /// Call from <c>AddSendr</c>: <c>services.AddSendr(o =&gt; o.UseGenerators())</c>.");
         sb.AppendLine("        /// </summary>");
-        sb.AppendLine("        public static global::Davish.Sendr.SendrOptions UseGenerators(this global::Davish.Sendr.SendrOptions options)");
+        sb.AppendLine("        /// <param name=\"options\">The options being configured.</param>");
+        sb.AppendLine("        /// <param name=\"configure\">");
+        sb.AppendLine("        /// An optional callback to include other assemblies' handlers, via");
+        sb.AppendLine("        /// <c>g.IncludeAssemblyOf&lt;TMarker&gt;()</c>. This is a compile-time-only declaration read");
+        sb.AppendLine("        /// directly from source by the source generator — the call itself does nothing at runtime.");
+        sb.AppendLine("        /// </param>");
+        sb.AppendLine("        public static global::Davish.Sendr.SendrOptions UseGenerators(");
+        sb.AppendLine("            this global::Davish.Sendr.SendrOptions options,");
+        sb.AppendLine("            global::System.Action<global::Davish.Sendr.GeneratedSenderOptions>? configure = null)");
         sb.AppendLine("        {");
+        sb.AppendLine("            configure?.Invoke(new global::Davish.Sendr.GeneratedSenderOptions());");
         sb.AppendLine("            options.UseSender<global::Davish.Sendr.Generated.GeneratedSender>();");
         sb.AppendLine("            var services = options.Services;");
         sb.AppendLine();

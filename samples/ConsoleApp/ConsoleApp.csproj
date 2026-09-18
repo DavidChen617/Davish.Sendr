@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sendr\Sendr.csproj" />
+    <!--
+      OutputItemType="Analyzer" is what actually makes Sendr.Generators run against this project's
+      compilation — a plain ProjectReference only adds it as an ordinary compiled dependency, which
+      is why UseGenerators() (and Sendr.Generated.g.cs) never showed up before this was added.
+      ReferenceOutputAssembly="false" because nothing here calls into the generator's own types
+      directly; only its generator behavior is needed.
+    -->
+    <ProjectReference Include="..\..\src\Sendr.Generators\Sendr.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+
+    <ProjectReference Include="..\..\src\Sendr.Abstractions\Sendr.Abstractions.csproj" />
+
+    <ProjectReference Include="..\ConsoleLib\ConsoleLib.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Writes the generator's output to obj/.../generated so it can actually be inspected on disk. -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+
+</Project>

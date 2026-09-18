@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/ConsoleApp/ConsoleApp.csproj" />
+    <Project Path="samples/ConsoleLib/ConsoleLib.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Sendr.Abstractions/Sendr.Abstractions.csproj" />
     <Project Path="src/Sendr.Shared/Sendr.Shared.csproj" />
@@ -14,6 +18,7 @@
     <Project Path="tests/Notification.Tests/Notification.Tests.csproj" />
     <Project Path="tests/UnitTests/UnitTests.csproj" />
     <Project Path="tests/Generator.Tests/Generator.Tests.csproj" />
+    <Project Path="tests/Generator.Tests.HandlerLibrary/Generator.Tests.HandlerLibrary.csproj" />
     <Project Path="tests/AbstractionsConsumer.Tests/AbstractionsConsumer.Tests.csproj" />
   </Folder>
 </Solution>
