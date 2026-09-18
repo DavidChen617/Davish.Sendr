@@ -2,29 +2,29 @@
 
 # Davish.Sendr
 
-*A free, lightweight mediator for .NET — explicit, no assembly scanning.*
+*A free, lightweight mediator for .NET with explicit registration and no runtime assembly scanning.*
 
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.svg)](https://www.nuget.org/packages/Davish.Sendr/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
 
-Sendr keeps the ergonomics you expect from a mediator — send a request, let a handler resolve it, wrap it in cross-cutting behaviour — while staying small, allocation-conscious, and fully explicit about what is registered. It covers request/response dispatching, async streams, notification fan-out, and a decorator pipeline that works across all three.
+Sendr is a small mediator library designed to limit allocations. It supports request/response dispatch, async streams, and notification publishing, with decorators for each. Register handlers explicitly or opt into compile-time discovery.
 
 ## Features
 
-- **Request/response dispatching** — `IRequest` for commands, `IRequest<TResponse>` for queries, each resolved to exactly one handler.
-- **CQRS contracts** — `ICommand` / `ICommand<TResponse>` and `IQuery<TResponse>` name the command/query split explicitly, while still dispatching through the same `ISender`.
-- **Async streams** — `IStreamRequest<TResponse>` dispatched lazily as `IAsyncEnumerable<T>`.
-- **Notification fan-out** — `INotification` published to any number of handlers, arranged into an ordered **Sequence** group and a concurrent **Parallel** group.
-- **Non-generic decorators** — a single decorator type wraps *any* compatible request, stream, or notification handler; no per-type boilerplate.
-- **Explicit registration** — every handler is registered by hand. No reflection-based assembly scanning, no surprises at startup.
-- **Optional source-generated dispatch** — `Davish.Sendr.Generators` discovers handlers at compile time and installs a reflection-free `ISender`/`IStreamSender`; opt in with `AddSendr(o => o.UseGenerators())`.
-- **Multi-target** — builds for `netstandard2.0` and `net10.0`.
-- **Split packages** — depend only on `Davish.Sendr.Abstractions` from your domain layer; the implementation ships in `Davish.Sendr` alone, request/response and notification together.
+- Dispatch `IRequest` commands and `IRequest<TResponse>` queries to one handler per request/response pair.
+- Use `ICommand`, `ICommand<TResponse>`, and `IQuery<TResponse>` for explicit CQRS contracts, dispatched through the same `ISender`.
+- Return lazy async streams with `IStreamRequest<TResponse>` and `IAsyncEnumerable<T>`.
+- Publish `INotification` to any number of handlers in ordered Sequence and concurrent Parallel groups.
+- Wrap compatible request, stream, or notification handlers with a reusable, non-generic decorator.
+- Register handlers manually or use compile-time discovery. Neither path scans assemblies at runtime.
+- Enable reflection-free `ISender`/`IStreamSender` dispatch with `Davish.Sendr.Generators` and `AddSendr(o => o.UseGenerators())`.
+- Target `netstandard2.0` and `net10.0`.
+- Reference `Davish.Sendr.Abstractions` for domain contracts and `Davish.Sendr` for the request/response and notification implementations.
 
 > [!NOTE]
-> Unlike scanning-based mediators, Sendr never discovers handlers implicitly. Registration is a compile-time-checked call, so a missing handler is obvious at the composition root.
+> Manual registration uses generic constraints to check handler compatibility at compile time. The optional source generator discovers handlers in the current project and explicitly included assemblies. Missing request handlers are reported when dispatched; stream requests report them when enumeration starts.
 
 ## Install
 
@@ -38,14 +38,14 @@ The contracts (`IRequest`, `IRequestHandler`, `IRequestDecorator`, `ISender`, �
 dotnet add package Davish.Sendr.Abstractions
 ```
 
-Notification publishing (`INotification`, `IPublisher`, `AddSendrNotification`, …) ships in these same two packages — no extra package needed.
+Notification publishing (`INotification`, `IPublisher`, `AddSendrNotification`, …) is included in these two packages.
 
-If you want the CQRS naming (`ICommand`, `IQuery`, …) instead of the plain `IRequest` contracts, it's already there too — `ICommand`/`ICommandHandler`/`IQuery`/`IQueryHandler` ship in `Davish.Sendr.Abstractions` itself.
+The CQRS contracts (`ICommand`, `ICommandHandler`, `IQuery`, and `IQueryHandler`) are also included in `Davish.Sendr.Abstractions`.
 
 > [!NOTE]
-> `Davish.Sendr.Message` and `Davish.Sendr.Notification`/`Davish.Sendr.Notification.Abstractions` are deprecated — those types used to live there. The packages still resolve (they now just reference `Davish.Sendr.Abstractions`/`Davish.Sendr`), so existing references keep compiling, but new projects should reference `Davish.Sendr.Abstractions`/`Davish.Sendr` directly instead.
+> `Davish.Sendr.Message`, `Davish.Sendr.Notification`, and `Davish.Sendr.Notification.Abstractions` are deprecated compatibility packages. They reference `Davish.Sendr.Abstractions` or `Davish.Sendr`, so existing package references still compile. New projects should reference `Davish.Sendr.Abstractions` and `Davish.Sendr` directly.
 
-Compile-time handler discovery and dispatch (opt-in — see [Source-generated registration](#source-generated-registration-opt-in)):
+For optional [compile-time handler discovery and dispatch](#source-generated-registration-opt-in), install:
 
 ```bash
 dotnet add package Davish.Sendr.Generators
@@ -64,7 +64,7 @@ builder.Services
 ```
 
 > [!NOTE]
-> Only one handler may be registered per request/response pair — a second `AddRequestHandler`/`AddCommandHandler`/`AddQueryHandler`/`AddStreamRequestHandler` call for the same type and response throws `InvalidOperationException` instead of silently replacing the first. Calling `SendAsync`/`SendStream` for a type with no handler registered throws `InvalidOperationException` naming the registration call that's missing, rather than a bare DI "no service registered" message. Each registration is frozen at the point it's made — the `configure` callback's parameter isn't meant to be kept and mutated afterward; doing so has no effect on a provider already built from it.
+> Register one handler per request/response pair. A second `AddRequestHandler`, `AddCommandHandler`, `AddQueryHandler`, or `AddStreamRequestHandler` call for the same type and response throws `InvalidOperationException`. Dispatching a request without a registered handler also throws `InvalidOperationException`, with a message naming the missing registration call. For streams, this happens when enumeration starts. Registration captures the configuration immediately; later changes to the object passed to `configure` have no effect.
 
 ## Requests
 
@@ -110,7 +110,7 @@ var order = await sender.SendAsync(new GetOrder(Guid.NewGuid()), cancellationTok
 
 ## Commands and queries (CQRS)
 
-`ICommand` / `ICommand<TResponse>` and `IQuery<TResponse>` are their own hierarchy, independent of `IRequest` / `IRequest<TResponse>` — not a wrapper over it. Each has its own handler interface, its own `ISender.SendAsync` overload, its own registration method, and its own decorator interface (`ICommandDecorator` / `IQueryDecorator`), so a command or query handler never implements `IRequestHandler`.
+`ICommand` / `ICommand<TResponse>` and `IQuery<TResponse>` are independent of `IRequest` / `IRequest<TResponse>`. Each has its own handler interface, `ISender.SendAsync` overload, registration method, and decorator interface. Command and query handlers use `ICommandHandler` and `IQueryHandler` respectively, without requiring `IRequestHandler`.
 
 ```csharp
 public sealed record CreateOrder(Guid Id) : ICommand;
@@ -136,7 +136,7 @@ public sealed class GetOrderHandler : IQueryHandler<GetOrder, OrderDto>
 }
 ```
 
-Register with `AddCommandHandler`/`AddQueryHandler` instead of `AddRequestHandler`. `ISender.SendAsync` still resolves the right overload from the argument's static type — call sites don't change.
+Register with `AddCommandHandler` or `AddQueryHandler`. Call sites still use `ISender.SendAsync`, which selects the overload from the argument's static type.
 
 ```csharp
 builder.Services
@@ -145,7 +145,7 @@ builder.Services
     .AddQueryHandler<GetOrder, OrderDto, GetOrderHandler>();
 ```
 
-Decorators for commands/queries implement `ICommandDecorator`/`IQueryDecorator` rather than `IRequestDecorator` — the same shape, just constrained to `ICommand`/`IQuery` instead of `IRequest`:
+Command and query decorators implement `ICommandDecorator` and `IQueryDecorator`. They follow the same pattern as `IRequestDecorator`, with constraints on `ICommand` and `IQuery`:
 
 ```csharp
 public sealed class LoggingCommandDecorator(ILogger<LoggingCommandDecorator> logger) : ICommandDecorator
@@ -162,7 +162,7 @@ public sealed class LoggingCommandDecorator(ILogger<LoggingCommandDecorator> log
 
 ## Decorators
 
-Decorators are non-generic pipeline behaviours. A single decorator type can wrap any compatible request type — implement `IRequestDecorator` for commands and `IRequestDecorator.WithResponse` for queries.
+Decorators are non-generic pipeline behaviours that can wrap any compatible request type. Use `IRequestDecorator` for `IRequest` and `IRequestDecorator.WithResponse` for `IRequest<TResponse>`. The separate CQRS contracts use `ICommandDecorator`, `ICommandDecorator.WithResponse`, and `IQueryDecorator`.
 
 ```csharp
 builder.Services
@@ -205,7 +205,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 
 ## Source-generated registration (opt-in)
 
-`Davish.Sendr.Generators` discovers your `IRequestHandler`/`IStreamRequestHandler` implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr` and replaces every manual `AddRequestHandler`/`AddStreamRequestHandler` call, backed by a reflection-free `ISender`/`IStreamSender` — dispatch is a compile-time-built `Dictionary<Type, Func<...>>` lookup, not `MakeGenericType` + compiled expression trees.
+`Davish.Sendr.Generators` discovers your request, command, query, and stream handler implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr`. It registers the discovered handlers and installs a reflection-free `ISender`/`IStreamSender`. Dispatch uses generated dictionaries keyed by message type and, where applicable, response type.
 
 ```xml
 <PackageReference Include="Davish.Sendr" Version="3.5.0" />
@@ -216,7 +216,7 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 builder.Services.AddSendr(o => o.UseGenerators());
 ```
 
-Decorators are declared on the handler with `[DecorateWith<...>]` instead of a fluent `configure` callback. Type arguments run outer to inner — the first one runs first, matching `x.Decorator.With<T>()` ordering:
+Declare decorators on the handler with `[DecorateWith<...>]`. Type arguments run from outermost to innermost, matching the order of `x.Decorator.With<T>()` calls:
 
 ```csharp
 [DecorateWith<TransactionDecorator, LoggingDecorator>]
@@ -228,20 +228,20 @@ public sealed class GetOrderHandler : IRequestHandler<GetOrder, OrderDto>
 
 Notes:
 
-- This is purely additive — `AddSendr()` without `UseGenerators()` keeps registering the default reflection-based sender unchanged.
-- `o.UseGenerators()` and manual `AddRequestHandler`/`AddStreamRequestHandler` calls don't mix for the *same* request type: once `UseGenerators()` installs the generated sender, dispatch only knows about handlers discovered at compile time. Use `SendrOptions.UseSender<TSender>()` directly if you ever need to plug in your own sender implementation the same way.
+- `AddSendr()` without `UseGenerators()` registers the default reflection-based sender.
+- Once `UseGenerators()` installs the generated sender, dispatch only knows about handlers discovered at compile time. Manual `AddRequestHandler`/`AddCommandHandler`/`AddQueryHandler`/`AddStreamRequestHandler` calls do not extend its dispatch tables. Choose manual registration or generated registration for the sender. Use `SendrOptions.UseSender<TSender>()` to install a custom sender implementation.
 - `[DecorateWith<...>]` comes in arities 1 through 8; apply at most one per handler class.
-- Handler classes and records are both discovered — not just `class`.
+- The generator discovers both classes and record classes.
 - A handler declared as `struct`/`record struct` is a compile error (`SENDR004`), since handler resolution (generated or manual) requires a reference type; use `class`/`record class` instead.
-- Generic (open) handler classes aren't discovered — register those manually with `AddRequestHandler`/`AddStreamRequestHandler` (without `UseGenerators()`).
-- By default, a handler only counts if it's declared in the *same project* that calls `UseGenerators()`: an incremental generator only ever inspects its own compilation's syntax trees, never the already-compiled output of a referenced project, so a handler living in a library referenced via `ProjectReference` (or a NuGet package) is invisible on its own even though it compiles and links fine. Name that library's assembly explicitly with `IncludeAssemblyOf<TMarker>()` (see [Cross-assembly discovery](#cross-assembly-discovery) below) to have the generator walk its metadata too, or register that library's handlers manually with `AddRequestHandler`/etc. instead.
-- A duplicate handler for the same request/response pair is a compile error (`SENDR002`), not a silent pick. A request type implementing `IRequest<TResponse>` (or `ICommand<TResponse>`/`IQuery<TResponse>`/`IStreamRequest<TResponse>`) for more than one `TResponse` is not a duplicate — each `TResponse` gets its own handler slot.
-- `ICommandHandler`/`IQueryHandler` are discovered the same way — `[DecorateWith<...>]` on a command/query handler validates against `ICommandDecorator`/`IQueryDecorator` instead.
-- `INotificationHandler` is covered too — see [Notification: source-generated registration](#notification-source-generated-registration-opt-in) below, since it plugs into `AddSendrNotification` rather than `AddSendr`.
+- Open generic handler classes are not discovered. Register closed constructed handler types with the appropriate manual registration method, without `UseGenerators()`.
+- By default, the generator discovers handlers only in the project that calls `UseGenerators()`. Handlers in a referenced project or NuGet package require an explicit `IncludeAssemblyOf<TMarker>()` declaration (see [Cross-assembly discovery](#cross-assembly-discovery)). Alternatively, use manual registration without `UseGenerators()`.
+- Multiple handlers for the same request/response pair produce compile error `SENDR002`. A message may implement `IRequest<TResponse>`, `ICommand<TResponse>`, `IQuery<TResponse>`, or `IStreamRequest<TResponse>` with multiple response types; each response type has its own handler slot.
+- The generator also discovers `ICommandHandler` and `IQueryHandler`. It validates their `[DecorateWith<...>]` attributes against the corresponding command or query decorator interface.
+- For `INotificationHandler`, use `AddSendrNotification`. See [Notification: source-generated registration](#notification-source-generated-registration-opt-in).
 
 ### Cross-assembly discovery
 
-Name another project's assembly explicitly to have the generator discover its handlers too — for example a domain/application layer referenced via `ProjectReference`, whose own build never runs `Davish.Sendr.Generators`:
+Include another assembly explicitly to discover its handlers. For example, a domain or application library referenced through `ProjectReference` does not need to run the generator itself:
 
 ```csharp
 // Any type declared in the library assembly works as the marker — it doesn't need to
@@ -261,16 +261,16 @@ o.UseGenerators(g => g
 
 Notes:
 
-- This is a compile-time-only declaration read directly from source by the generator — it does not perform any runtime assembly scanning, and it only recognizes a call written directly inline in the `UseGenerators(g => ...)` lambda (a fluent chain, or one call per statement in a block lambda). A delegate variable, method group, loop, conditional, or helper/extension method wrapping the configuration isn't statically resolvable and is a compile error (`SENDR005`).
+- The generator reads this declaration directly from source; it does not scan assemblies at runtime. Write calls inline in the `UseGenerators(g => ...)` lambda, either as a fluent chain or as individual statements in a block. Delegate variables, method groups, loops, conditionals, and helper or extension methods wrapping the configuration produce compile error `SENDR005`.
 - The current project is always included automatically; naming its own assembly again via a local marker is harmless, not an error.
-- Only the assemblies named directly are walked — an included assembly's own further dependencies are not pulled in transitively.
+- Discovery includes only the named assemblies, not their transitive dependencies.
 - A handler discovered this way must be accessible from the calling project: public (including every containing type, for a nested handler), or internal with a matching `[assembly: InternalsVisibleTo("...")]` declared by the library. Otherwise it's a compile error (`SENDR007`) rather than an invisible handler.
-- `ISender`/`IStreamSender` and `IPublisher` each build their own single dispatch table per compilation, from their own `UseGenerators()` call's inclusions — including the same library on both sides (one call for `AddSendr`, one for `AddSendrNotification`) is normal and expected. Every `UseGenerators()` call for the *same* one of those two, however, must declare the same assembly set; two calls that disagree are a compile error (`SENDR006`), since there both share that project's single generated dispatch table.
-- A duplicate handler for the same request/response pair across the current project and an included assembly — or across two included assemblies — is `SENDR002`, the same diagnostic as two handlers declared locally.
+- Each compilation has one set of generated dispatch tables for `ISender`/`IStreamSender` and a separate set for `IPublisher`. Each uses the assemblies declared in its own `UseGenerators()` configuration. You can include the same library on both sides. Multiple calls configuring the same sender or publisher must declare identical assembly sets; conflicting sets produce compile error `SENDR006`.
+- Duplicate handlers for a request/response pair produce `SENDR002` whether they are local, in an included assembly, or spread across assemblies.
 
 ## Streams
 
-Use `IStreamRequest<TResponse>` and `IStreamRequestHandler<TRequest, TResponse>` for async streams. The sequence is lazy — handling begins when enumeration starts.
+Use `IStreamRequest<TResponse>` and `IStreamRequestHandler<TRequest, TResponse>` for async streams. Handling begins when enumeration starts.
 
 ```csharp
 public sealed record ListOrders : IStreamRequest<OrderDto>;
@@ -279,7 +279,7 @@ public sealed class ListOrdersHandler : IStreamRequestHandler<ListOrders, OrderD
 {
     public async IAsyncEnumerable<OrderDto> HandleAsync(
         ListOrders request,
-        CancellationToken cancellationToken = default)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield return new OrderDto(Guid.NewGuid(), "SO-001");
         await Task.Delay(10, cancellationToken);
@@ -288,7 +288,7 @@ public sealed class ListOrdersHandler : IStreamRequestHandler<ListOrders, OrderD
 }
 ```
 
-Resolve `IStreamSender` and call `SendStream`.
+Resolve `IStreamSender` and call `SendStream`. `ISender` also inherits this method, so an existing sender can dispatch streams directly.
 
 ```csharp
 var streamSender = serviceProvider.GetRequiredService<IStreamSender>();
@@ -329,7 +329,7 @@ public sealed class LoggingStreamDecorator(ILogger<LoggingStreamDecorator> logge
 
 ## Notifications
 
-Unlike a request, a notification can have any number of handlers — including zero. Use `INotification` for events you want to fan out, `INotificationHandler<TNotification>` for each handler, and `IPublisher` to publish.
+A notification can have any number of handlers, including zero. Define the event with `INotification`, implement each handler with `INotificationHandler<TNotification>`, and publish it through `IPublisher`.
 
 ```csharp
 public sealed record OrderPlaced(Guid OrderId) : INotification;
@@ -351,7 +351,7 @@ public sealed class SendConfirmationEmailHandler : INotificationHandler<OrderPla
 }
 ```
 
-Call `AddSendrNotification` once, then register every handler for a notification type in a single `AddNotificationHandler` call, arranging them into a **Sequence** (run one after another, in order, stopping if one throws) and/or a **Parallel** group (run concurrently).
+Call `AddSendrNotification` once, then register every handler for a notification type in a single `AddNotificationHandler` call, arranging them into a **Sequence** (run one after another in registration order, continuing after failures) and/or a **Parallel** group (run concurrently). The two groups run concurrently with each other, so a Parallel handler does not wait for the Sequence group to finish.
 
 ```csharp
 builder.Services
@@ -363,7 +363,7 @@ builder.Services
     });
 ```
 
-Resolve `IPublisher` and call `PublishAsync`. It takes the non-generic `INotification`, so a batch collected polymorphically — for example from an outbox — can be published without knowing each concrete type; publishing a notification with no registered handlers is a no-op.
+Resolve `IPublisher` and call `PublishAsync`. It accepts the non-generic `INotification`, so you can publish a polymorphic batch, such as events from an outbox, without knowing each concrete type. Publishing a notification with no registered handlers is a no-op.
 
 ```csharp
 var publisher = serviceProvider.GetRequiredService<IPublisher>();
@@ -398,16 +398,16 @@ public sealed class LoggingNotificationDecorator(ILogger<LoggingNotificationDeco
 ```
 
 > [!IMPORTANT]
-> Both groups run every handler regardless of earlier failures — Sequence doesn't stop at the first throw, it just runs one handler at a time instead of concurrently. Every exception is collected: zero stay silent, exactly one is rethrown as itself (preserving its original stack trace), and two or more are combined into one `AggregateException` from `PublishAsync`. Handlers don't get an isolated DI scope either, so avoid sharing a non-thread-safe scoped service (such as a `DbContext`) across Parallel entries.
+> Both groups run every handler even if an earlier handler fails. Sequence awaits handlers one at a time; Parallel starts them concurrently. `PublishAsync` collects all exceptions: a single exception is rethrown with its original stack trace, and multiple exceptions are combined into an `AggregateException`. Handlers share the calling DI scope, so Parallel handlers must not share a non-thread-safe scoped service such as a `DbContext`.
 
 > [!NOTE]
-> `AddNotificationHandler<TNotification>` can only be called once per notification type — it throws on a second call, since the Sequence's order is only meaningful when every handler for that notification is declared together. The registration is frozen at the point it's made — the `configure` callback's parameter isn't meant to be kept and mutated afterward; doing so has no effect on a provider already built from it.
+> Call `AddNotificationHandler<TNotification>` once per notification type, with all handlers declared together so their Sequence order is explicit. A second call throws. Registration captures the configuration immediately; later changes to the object passed to `configure` have no effect.
 
 ## Notification: source-generated registration (opt-in)
 
 `Davish.Sendr.Generators` also discovers your `INotificationHandler<T>` implementations at compile time and generates `UseGenerators()`, a `NotificationOptions` extension that plugs into `AddSendrNotification`, backed by a reflection-free `IPublisher`.
 
-Unlike request/command/query handlers, any number of classes may handle the same notification type — that's the normal case, not a conflict — so there's no per-handler attribute and no `SENDR002` dedup for notifications. Instead, `RunAs` is a single, global choice for how handlers of the *same* notification run relative to each other, defaulting to `Sequence`:
+Multiple classes can handle the same notification, so they do not trigger the duplicate-handler diagnostic (`SENDR002`). There is no per-handler execution-mode attribute. Instead, `RunAs` sets how handlers of the same notification execute throughout the generated publisher. The default is `Sequence`:
 
 ```csharp
 builder.Services.AddSendrNotification(o => o.UseGenerators());
@@ -428,7 +428,7 @@ public sealed class ReserveInventoryHandler : INotificationHandler<OrderPlaced>
 
 Notes:
 
-- No ordering is guaranteed among handlers of the same notification, whether `Sequence` or `Parallel` — `RunAs` only chooses one-at-a-time vs. concurrent execution, not a priority between handlers.
-- `o.UseGenerators()` and manual `AddNotificationHandler` calls don't mix for the *same* notification type, same as the request-side generator.
-- Exception aggregation (the 0/1/2+ rule described above) is identical to the manual registration path — both call the same `NotificationGroupRunner`.
-- `GeneratedNotificationRunOptions` has its own `IncludeAssemblyOf<TMarker>()`, chainable with `RunAs`, for the same [cross-assembly discovery](#cross-assembly-discovery) described above — `o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel).IncludeAssemblyOf<ApplicationAssemblyMarker>())`. It has its own independent assembly set, so it doesn't need to match whatever `AddSendr`'s `UseGenerators()` declares.
+- `RunAs` selects sequential or concurrent execution. Neither mode guarantees the relative order of handlers for the same notification.
+- The generated publisher dispatches only to handlers discovered at compile time. Manual `AddNotificationHandler` calls do not extend its dispatch table; choose manual registration or generated registration for the publisher.
+- Generated and manual dispatch use `NotificationGroupRunner`, with the same exception aggregation rules described above.
+- `GeneratedNotificationRunOptions.IncludeAssemblyOf<TMarker>()` supports [cross-assembly discovery](#cross-assembly-discovery) and chains with `RunAs`: `o.UseGenerators(x => x.RunAs(NotificationRunMode.Parallel).IncludeAssemblyOf<ApplicationAssemblyMarker>())`. Its assembly set is independent of the one configured for `AddSendr`.
