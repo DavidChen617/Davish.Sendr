@@ -1,0 +1,30 @@
+baseURL = "https://example.org/"
+title = "Davish.Sendr"
+theme = "hugo-book"
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = false
+
+[languages]
+  [languages.en]
+    label = "English"
+    locale = "en-US"
+    weight = 1
+    contentDir = "content/en"
+
+  [languages.zh-tw]
+    label = "繁體中文"
+    locale = "zh-TW"
+    weight = 2
+    contentDir = "content/zh-tw"
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = false
+
+[params]
+  BookSection = "/"
+  BookToC = true
+  BookSearch = true
+  BookRepo = "https://github.com/DavidChen617/Davish.Sendr"
+  BookPortableLinks = "error"
