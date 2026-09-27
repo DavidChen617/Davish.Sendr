@@ -75,6 +75,34 @@ public class GeneratorTests
     }
 
     [Fact]
+    public async Task GivenGeneratedSender_WhenDecoratedWithInterfaceRegisteredAfterUseGenerators_ThenServiceProviderBuildsAndDecoratorRuns()
+    {
+        // Given
+        // The app-supplied registration is added after UseGenerators() — mirroring a consumer
+        // that declares [DecorateWith<IExternalDecorator>] in one project and registers its
+        // implementation in another (e.g. an Infrastructure layer's AddInfrastructure() called
+        // after Application's AddSendr(o => o.UseGenerators())). Before the fix, UseGenerators()
+        // would already have emitted a TryAddTransient(typeof(IExternalDecorator)) call — self-
+        // registering the interface as its own implementation type — and BuildServiceProvider()
+        // eagerly validates every descriptor's implementation type, so it threw an
+        // ArgumentException here regardless of this later, correct registration.
+        var provider = new ServiceCollection()
+            .AddScoped<LogCollector>()
+            .AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()))
+            .AddScoped<IExternalDecorator, ExternalDecorator>()
+            .BuildServiceProvider();
+        var collector = provider.GetRequiredService<LogCollector>();
+        var sender = provider.GetRequiredService<ISender>();
+
+        // When
+        var response = await sender.SendAsync(new GenInterfaceDecoratedQuery(), default);
+
+        // Then
+        Assert.IsType<GenSomeDto>(response);
+        Assert.Equal(["ExternalStart", "ExternalEnd"], collector.LogCollection);
+    }
+
+    [Fact]
     public async Task GivenGeneratedSender_WhenSendMultiDecoratedQuery_ThenFirstDeclaredDecoratorIsOutermost()
     {
         // Given
@@ -497,6 +525,39 @@ public sealed record GenDecoratedQuery : IRequest<GenSomeDto>;
 public sealed class GenDecoratedQueryHandler : IRequestHandler<GenDecoratedQuery, GenSomeDto>
 {
     public Task<GenSomeDto> HandleAsync(GenDecoratedQuery request, CancellationToken cancellationToken)
+        => Task.FromResult(new GenSomeDto());
+}
+
+public interface IExternalDecorator : IRequestDecorator, IRequestDecorator.WithResponse;
+
+public sealed class ExternalDecorator(LogCollector collector) : IExternalDecorator
+{
+    public async Task<TResponse> HandleAsync<TRequest, TResponse>(
+        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        where TRequest : IRequest<TResponse>
+    {
+        collector.LogCollection.Add("ExternalStart");
+        var response = await next();
+        collector.LogCollection.Add("ExternalEnd");
+        return response;
+    }
+
+    public async Task HandleAsync<TRequest>(
+        TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
+        where TRequest : IRequest
+    {
+        collector.LogCollection.Add("ExternalStart");
+        await next();
+        collector.LogCollection.Add("ExternalEnd");
+    }
+}
+
+public sealed record GenInterfaceDecoratedQuery : IRequest<GenSomeDto>;
+
+[DecorateWith<IExternalDecorator>]
+public sealed class GenInterfaceDecoratedQueryHandler : IRequestHandler<GenInterfaceDecoratedQuery, GenSomeDto>
+{
+    public Task<GenSomeDto> HandleAsync(GenInterfaceDecoratedQuery request, CancellationToken cancellationToken)
         => Task.FromResult(new GenSomeDto());
 }
 

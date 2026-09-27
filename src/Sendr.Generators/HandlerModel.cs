@@ -18,7 +18,13 @@ internal enum HandlerKind
 /// decorator interface the handler kind requires.
 /// </summary>
 /// <param name="TypeName">Fully-qualified (global::-prefixed) name of the decorator type.</param>
-internal readonly record struct DecoratorRef(string TypeName);
+/// <param name="IsInstantiable">
+/// Whether <paramref name="TypeName"/> is a concrete, constructible type. False for an interface
+/// or abstract class — e.g. <c>[DecorateWith&lt;ITransactionalDecorator&gt;]</c>, where the
+/// decorator is expected to be registered by the consuming application, not self-registered by
+/// the generator.
+/// </param>
+internal readonly record struct DecoratorRef(string TypeName, bool IsInstantiable);
 
 /// <summary>
 /// A handler class discovered by the generator, along with everything needed to emit its DI

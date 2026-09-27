@@ -341,7 +341,8 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
-            decorators.Add(new DecoratorRef(ToGlobalName(decoratorType)));
+            var isInstantiable = decoratorType.TypeKind != TypeKind.Interface && !decoratorType.IsAbstract;
+            decorators.Add(new DecoratorRef(ToGlobalName(decoratorType), isInstantiable));
         }
 
         return (decorators.ToImmutable(), diagnostics.ToImmutable());

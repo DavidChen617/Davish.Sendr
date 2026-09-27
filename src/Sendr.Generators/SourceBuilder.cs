@@ -127,11 +127,21 @@ internal static class SourceBuilder
                 sb.AppendLine($"            services.AddTransient<{model.HandlerType}>();");
         }
 
+        // A non-instantiable decorator (an interface or abstract class, e.g.
+        // [DecorateWith<ITransactionalDecorator>]) is deliberately left unregistered here: the
+        // consuming application is expected to supply its own registration (e.g.
+        // services.AddScoped<ITransactionalDecorator, TransactionalDecorator>()). Emitting
+        // TryAddTransient(typeof(ITransactionalDecorator)) for it would register the interface as
+        // its own implementation type, which the container rejects at startup with
+        // "Cannot instantiate implementation type" even if the application's own registration
+        // would otherwise satisfy it — TryAdd only skips when a prior registration already exists
+        // at the point this call runs, and ServiceProvider validates every descriptor's
+        // implementation type up front regardless of resolution order.
         var emittedDecorators = new HashSet<string>();
         foreach (var model in models)
             foreach (var decorator in model.Decorators)
             {
-                if (emittedDecorators.Add(decorator.TypeName))
+                if (decorator.IsInstantiable && emittedDecorators.Add(decorator.TypeName))
                     sb.AppendLine(
                         $"            global::Microsoft.Extensions.DependencyInjection.Extensions." +
                         $"ServiceCollectionDescriptorExtensions.TryAddTransient(services, typeof({decorator.TypeName}));");
