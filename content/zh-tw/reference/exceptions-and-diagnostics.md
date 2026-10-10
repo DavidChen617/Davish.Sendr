@@ -42,6 +42,13 @@ Davish.Sendr: no handler is registered for '<requestType>' with response '<respo
 
 背後的執行語意見[Notification 模型](../concepts/notification-model.md)。
 
+### 有 tracing listener 訂閱時的同步例外
+
+當有 listener 訂閱了 `Davish.Sendr` 這個 `ActivitySource` 時，handler 同步丟出的例外
+（在它回傳 `Task` 之前就丟出），會透過回傳的 `Task` 傳給呼叫端，而不是由
+`SendAsync`/`PublishAsync` 本身丟出。不論哪一種，`await` 這個呼叫的程式碼看到的都是同一個
+例外。沒有 listener 時，行為不變。見 [Tracing](../guides/tracing.md)。
+
 ## 編譯期診斷（`Davish.Sendr.Generators`）
 
 | ID | 嚴重性 | 標題 | 什麼時候會發生 |

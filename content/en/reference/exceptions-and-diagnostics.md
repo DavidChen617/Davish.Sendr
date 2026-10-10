@@ -45,6 +45,14 @@ ran, rather than surfacing only the first:
 See [Notification model](../concepts/notification-model.md) for the execution semantics
 behind this.
 
+### Synchronous exceptions while a tracing listener is subscribed
+
+When a listener is subscribed to the `Davish.Sendr` `ActivitySource`, an exception that
+a handler throws synchronously — before it returns a `Task` — reaches the caller through the
+returned `Task` instead of being thrown by `SendAsync`/`PublishAsync` itself. Code that
+`await`s the call observes the same exception either way. Without a listener, behavior is
+unchanged. See [Tracing](../guides/tracing.md).
+
 ## Compile-time diagnostics (`Davish.Sendr.Generators`)
 
 | ID | Severity | Title | When it fires |
