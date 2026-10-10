@@ -183,7 +183,13 @@ internal static class SourceBuilder
         sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
         sb.AppendLine();
         sb.AppendLine("            if (_requestHandlers.TryGetValue(request.GetType(), out var handler))");
-        sb.AppendLine("                return handler(_sp, request, cancellationToken);");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                    return handler(_sp, request, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"request\", request.GetType(), (handler, _sp, request, cancellationToken), " +
+                              "static s => s.handler(s._sp, s.request, s.cancellationToken));");
+        sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}>\"));");
@@ -227,7 +233,13 @@ internal static class SourceBuilder
         sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(request));");
         sb.AppendLine();
         sb.AppendLine("            if (_requestResponseHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
-        sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                    return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"request\", request.GetType(), (handler, _sp, request, cancellationToken), " +
+                              "static s => (global::System.Threading.Tasks.Task<TResponse>)s.handler(s._sp, s.request, s.cancellationToken));");
+        sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
@@ -320,7 +332,13 @@ internal static class SourceBuilder
         sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(command));");
         sb.AppendLine();
         sb.AppendLine("            if (_commandHandlers.TryGetValue(command.GetType(), out var handler))");
-        sb.AppendLine("                return handler(_sp, command, cancellationToken);");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                    return handler(_sp, command, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"command\", command.GetType(), (handler, _sp, command, cancellationToken), " +
+                              "static s => s.handler(s._sp, s.command, s.cancellationToken));");
+        sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}>\"));");
@@ -360,7 +378,13 @@ internal static class SourceBuilder
         sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(command));");
         sb.AppendLine();
         sb.AppendLine("            if (_commandResponseHandlers.TryGetValue((command.GetType(), typeof(TResponse)), out var handler))");
-        sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                    return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"command\", command.GetType(), (handler, _sp, command, cancellationToken), " +
+                              "static s => (global::System.Threading.Tasks.Task<TResponse>)s.handler(s._sp, s.command, s.cancellationToken));");
+        sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}, {typeof(TResponse)}>\"));");
@@ -400,7 +424,13 @@ internal static class SourceBuilder
         sb.AppendLine("                throw new global::System.ArgumentNullException(nameof(query));");
         sb.AppendLine();
         sb.AppendLine("            if (_queryHandlers.TryGetValue((query.GetType(), typeof(TResponse)), out var handler))");
-        sb.AppendLine("                return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                    return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"query\", query.GetType(), (handler, _sp, query, cancellationToken), " +
+                              "static s => (global::System.Threading.Tasks.Task<TResponse>)s.handler(s._sp, s.query, s.cancellationToken));");
+        sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"IQueryHandler<{query.GetType()}, {typeof(TResponse)}>\"));");
@@ -424,30 +454,55 @@ internal static class SourceBuilder
         sb.AppendLine("        }");
         sb.AppendLine();
 
+        // One static method per handler, holding the handler + decorator chain. The table entry
+        // below calls it directly when nothing is listening, and through the span wrapper when
+        // something is, so the untraced path allocates and copies nothing extra.
+        var step = 0;
+        foreach (var group in models.GroupBy(m => m.RequestType))
+        {
+            foreach (var model in group)
+            {
+                sb.AppendLine($"        private static global::System.Threading.Tasks.Task Step{step++}(");
+                sb.AppendLine("            global::System.IServiceProvider sp,");
+                sb.AppendLine("            global::Davish.Sendr.INotification notification,");
+                sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            var r = ({model.RequestType})notification;");
+                sb.AppendLine($"            var h = (global::Davish.Sendr.INotificationHandler<{model.RequestType}>)" +
+                               $"sp.GetRequiredService<{model.HandlerType}>();");
+                AppendDecoratorLocals(sb, model, "global::Davish.Sendr.INotificationDecorator");
+                var call = BuildComposedCall(model, "h.HandleAsync(r, cancellationToken)");
+                sb.AppendLine($"            return {call};");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+            }
+        }
+
         sb.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<");
         sb.AppendLine("            global::System.Type,");
         sb.AppendLine("            global::System.Func<global::System.IServiceProvider, global::Davish.Sendr.INotification, " +
-                      "global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task>[]> _notificationHandlers = new()");
+                      "global::System.Threading.CancellationToken, global::Davish.Sendr.NotificationRunMode, " +
+                      "global::System.Threading.Tasks.Task>[]> _notificationHandlers = new()");
         sb.AppendLine("        {");
 
+        step = 0;
         foreach (var group in models.GroupBy(m => m.RequestType))
         {
             sb.AppendLine($"            [typeof({group.Key})] = new global::System.Func<global::System.IServiceProvider, " +
                           "global::Davish.Sendr.INotification, global::System.Threading.CancellationToken, " +
-                          "global::System.Threading.Tasks.Task>[]");
+                          "global::Davish.Sendr.NotificationRunMode, global::System.Threading.Tasks.Task>[]");
             sb.AppendLine("            {");
 
             foreach (var model in group)
             {
-                sb.AppendLine("                static (sp, notification, cancellationToken) =>");
-                sb.AppendLine("                {");
-                sb.AppendLine($"                    var r = ({model.RequestType})notification;");
-                sb.AppendLine($"                    var h = (global::Davish.Sendr.INotificationHandler<{model.RequestType}>)" +
-                               $"sp.GetRequiredService<{model.HandlerType}>();");
-                AppendDecoratorLocals(sb, model, "global::Davish.Sendr.INotificationDecorator");
-                var call = BuildComposedCall(model, "h.HandleAsync(r, cancellationToken)");
-                sb.AppendLine($"                    return {call};");
-                sb.AppendLine("                },");
+                var n = step++;
+                sb.AppendLine("                static (sp, notification, cancellationToken, runMode) =>");
+                sb.AppendLine("                    global::Davish.Sendr.SendrActivitySource.IsEnabled");
+                sb.AppendLine($"                        ? global::Davish.Sendr.SendrActivitySource.InvokeHandler(typeof({model.HandlerType}),");
+                sb.AppendLine("                            runMode == global::Davish.Sendr.NotificationRunMode.Parallel ? \"parallel\" : \"sequence\",");
+                sb.AppendLine("                            (sp, notification, cancellationToken),");
+                sb.AppendLine($"                            static s => Step{n}(s.sp, s.notification, s.cancellationToken))");
+                sb.AppendLine($"                        : Step{n}(sp, notification, cancellationToken),");
             }
 
             sb.AppendLine("            },");
@@ -471,12 +526,21 @@ internal static class SourceBuilder
         sb.AppendLine("            for (var i = 0; i < steps.Length; i++)");
         sb.AppendLine("            {");
         sb.AppendLine("                var step = steps[i];");
-        sb.AppendLine("                bound[i] = ct => step(_sp, notification, ct);");
+        sb.AppendLine("                bound[i] = ct => step(_sp, notification, ct, _runMode);");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            return _runMode == global::Davish.Sendr.NotificationRunMode.Parallel");
-        sb.AppendLine("                ? global::Davish.Sendr.NotificationGroupRunner.RunParallelAsync(bound, cancellationToken)");
-        sb.AppendLine("                : global::Davish.Sendr.NotificationGroupRunner.RunSequenceAsync(bound, cancellationToken);");
+        sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                return _runMode == global::Davish.Sendr.NotificationRunMode.Parallel");
+        sb.AppendLine("                    ? global::Davish.Sendr.NotificationGroupRunner.RunParallelAsync(bound, cancellationToken)");
+        sb.AppendLine("                    : global::Davish.Sendr.NotificationGroupRunner.RunSequenceAsync(bound, cancellationToken);");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            return global::Davish.Sendr.SendrActivitySource.Invoke(\"notification\", notification.GetType(),");
+        sb.AppendLine("                (bound, cancellationToken, _runMode),");
+        sb.AppendLine("                static s => s.Item3 == global::Davish.Sendr.NotificationRunMode.Parallel");
+        sb.AppendLine("                    ? global::Davish.Sendr.NotificationGroupRunner.RunParallelAsync(s.bound, s.cancellationToken)");
+        sb.AppendLine("                    : global::Davish.Sendr.NotificationGroupRunner.RunSequenceAsync(s.bound, s.cancellationToken));");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
     }

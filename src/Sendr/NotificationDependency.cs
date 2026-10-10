@@ -115,7 +115,7 @@ public sealed class NotificationHandlerOptions<TNotification>
     public NotificationHandlerBuilder<TNotification> Handler => new(this);
 
     internal Func<IServiceProvider, TNotification, CancellationToken, Task> BuildStep<THandler>(
-        Stack<Type> decorators)
+        Stack<Type> decorators, string group)
         where THandler : class, INotificationHandler<TNotification>
     {
         HandlerTypes.Add(typeof(THandler));
@@ -131,18 +131,29 @@ public sealed class NotificationHandlerOptions<TNotification>
         foreach (var decoratorType in decoratorsSnapshot)
             DecoratorTypes.Add(decoratorType);
 
-        return (sp, notification, cancellationToken) =>
+        // The span wraps the handler together with its decorators: a step is the unit the runner
+        // sees, and is what a caller experiences as "one handler ran". With no listener the step
+        // runs RunStep directly, with no state tuple or delegate.
+        return (sp, notification, cancellationToken) => SendrActivitySource.IsEnabled
+            ? SendrActivitySource.InvokeHandler(
+                typeof(THandler), group, (sp, notification, decoratorsSnapshot, cancellationToken),
+                static s => RunStep<THandler>(s.sp, s.notification, s.decoratorsSnapshot, s.cancellationToken))
+            : RunStep<THandler>(sp, notification, decoratorsSnapshot, cancellationToken);
+    }
+
+    private static Task RunStep<THandler>(
+        IServiceProvider sp, TNotification notification, Type[] decorators, CancellationToken cancellationToken)
+        where THandler : class, INotificationHandler<TNotification>
+    {
+        INotificationHandler<TNotification> handler = sp.GetRequiredService<THandler>();
+
+        foreach (var decoratorType in decorators)
         {
-            INotificationHandler<TNotification> handler = sp.GetRequiredService<THandler>();
+            var decorator = (INotificationDecorator)sp.GetRequiredService(decoratorType);
+            handler = new NotificationDecoratorHandler<TNotification>(decorator, handler);
+        }
 
-            foreach (var decoratorType in decoratorsSnapshot)
-            {
-                var decorator = (INotificationDecorator)sp.GetRequiredService(decoratorType);
-                handler = new NotificationDecoratorHandler<TNotification>(decorator, handler);
-            }
-
-            return handler.HandleAsync(notification, cancellationToken);
-        };
+        return handler.HandleAsync(notification, cancellationToken);
     }
 }
 
@@ -204,7 +215,7 @@ public sealed class SequenceHandlerBuilder<TNotification>
         var entryOptions = new NotificationHandlerEntryOptions<TNotification>();
         configure?.Invoke(entryOptions);
 
-        _options.SequenceSteps.Add(_options.BuildStep<THandler>(entryOptions.Decorators));
+        _options.SequenceSteps.Add(_options.BuildStep<THandler>(entryOptions.Decorators, "sequence"));
 
         return this;
     }
@@ -239,7 +250,7 @@ public sealed class ParallelHandlerBuilder<TNotification>
         var entryOptions = new NotificationHandlerEntryOptions<TNotification>();
         configure?.Invoke(entryOptions);
 
-        _options.ParallelSteps.Add(_options.BuildStep<THandler>(entryOptions.Decorators));
+        _options.ParallelSteps.Add(_options.BuildStep<THandler>(entryOptions.Decorators, "parallel"));
 
         return this;
     }

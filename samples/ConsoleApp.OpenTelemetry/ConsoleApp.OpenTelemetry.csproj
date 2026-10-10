@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+  </ItemGroup>
+
+  <ItemGroup>
+
+    <ProjectReference Include="..\..\src\Sendr\Sendr.csproj" />
+
+    <ProjectReference Include="..\..\src\Sendr.Abstractions\Sendr.Abstractions.csproj" />
+
+    <ProjectReference Include="..\..\src\Sendr.Shared\Sendr.Shared.csproj" />
+
+    <ProjectReference Include="..\..\src\Sendr.Generators\Sendr.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.19.1" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+
+</Project>

@@ -7,9 +7,15 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
-        return ((RequestHandler)
+        if (!SendrActivitySource.IsEnabled)
+            return ((RequestHandler)
                 registry.GetOrCreate(request.GetType()))
             .HandleAsync(request, sp, cancellationToken);
+
+        return SendrActivitySource.Invoke("request", request.GetType(),
+            (registry, sp, request, cancellationToken),
+            static s => ((RequestHandler)s.registry.GetOrCreate(s.request.GetType()))
+                .HandleAsync(s.request, s.sp, s.cancellationToken));
     }
 
     public Task<TResponse> SendAsync<TResponse>(IRequest<TResponse> request,
@@ -18,9 +24,15 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
-        return ((RequestHandler<TResponse>)
+        if (!SendrActivitySource.IsEnabled)
+            return ((RequestHandler<TResponse>)
                 registry.GetOrCreate(request.GetType(), typeof(TResponse)))
             .HandleAsync(request, sp, cancellationToken);
+
+        return SendrActivitySource.Invoke("request", request.GetType(),
+            (registry, sp, request, cancellationToken),
+            static s => ((RequestHandler<TResponse>)s.registry.GetOrCreate(s.request.GetType(), typeof(TResponse)))
+                .HandleAsync(s.request, s.sp, s.cancellationToken));
     }
 
     public IAsyncEnumerable<TResponse> SendStream<TResponse>(
@@ -55,9 +67,15 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
         if (command is null)
             throw new ArgumentNullException(nameof(command));
 
-        return ((CommandHandler)
+        if (!SendrActivitySource.IsEnabled)
+            return ((CommandHandler)
                 registry.GetOrCreateCommand(command.GetType()))
             .HandleAsync(command, sp, cancellationToken);
+
+        return SendrActivitySource.Invoke("command", command.GetType(),
+            (registry, sp, command, cancellationToken),
+            static s => ((CommandHandler)s.registry.GetOrCreateCommand(s.command.GetType()))
+                .HandleAsync(s.command, s.sp, s.cancellationToken));
     }
 
     public Task<TResponse> SendAsync<TResponse>(ICommand<TResponse> command,
@@ -66,9 +84,15 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
         if (command is null)
             throw new ArgumentNullException(nameof(command));
 
-        return ((CommandHandler<TResponse>)
+        if (!SendrActivitySource.IsEnabled)
+            return ((CommandHandler<TResponse>)
                 registry.GetOrCreateCommand(command.GetType(), typeof(TResponse)))
             .HandleAsync(command, sp, cancellationToken);
+
+        return SendrActivitySource.Invoke("command", command.GetType(),
+            (registry, sp, command, cancellationToken),
+            static s => ((CommandHandler<TResponse>)s.registry.GetOrCreateCommand(s.command.GetType(), typeof(TResponse)))
+                .HandleAsync(s.command, s.sp, s.cancellationToken));
     }
 
     public Task<TResponse> SendAsync<TResponse>(IQuery<TResponse> query,
@@ -77,8 +101,14 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
         if (query is null)
             throw new ArgumentNullException(nameof(query));
 
-        return ((QueryHandler<TResponse>)
+        if (!SendrActivitySource.IsEnabled)
+            return ((QueryHandler<TResponse>)
                 registry.GetOrCreateQuery(query.GetType(), typeof(TResponse)))
             .HandleAsync(query, sp, cancellationToken);
+
+        return SendrActivitySource.Invoke("query", query.GetType(),
+            (registry, sp, query, cancellationToken),
+            static s => ((QueryHandler<TResponse>)s.registry.GetOrCreateQuery(s.query.GetType(), typeof(TResponse)))
+                .HandleAsync(s.query, s.sp, s.cancellationToken));
     }
 }
