@@ -8,9 +8,9 @@ weight: 10
 
 | PackageId | 版本 | 狀態 | 用途 |
 |---|---|---|---|
-| `Davish.Sendr` | 3.5.0 | 目前主力 | Request/response 與 stream 分派、notification 發佈、decorator pipeline、DI 註冊（`AddSendr`、`AddSendrNotification`）。依賴 `Davish.Sendr.Abstractions`。 |
+| `Davish.Sendr` | 3.6.0 | 目前主力 | Request/response 與 stream 分派、notification 發佈、decorator pipeline、tracing（`SendrActivitySource`）、DI 註冊（`AddSendr`、`AddSendrNotification`）。依賴 `Davish.Sendr.Abstractions`。 |
 | `Davish.Sendr.Abstractions` | 4.0.0 | 目前主力 | 只有合約：`IRequest`、`IRequestHandler`、`IRequestDecorator`、`ISender`、`ICommand`、`IQuery`、`INotification`、`INotificationHandler`、`INotificationDecorator`、`IPublisher` 等相關型別。沒有 DI 實作。 |
-| `Davish.Sendr.Generators` | 2.1.0 | 目前主力，選用 | Roslyn incremental source generator：編譯期 handler 發現、`[DecorateWith<...>]` 佈線，透過 `UseGenerators()` 提供 reflection-free 的 `ISender`/`IStreamSender`/`IPublisher`。 |
+| `Davish.Sendr.Generators` | 2.2.0 | 目前主力，選用 | Roslyn incremental source generator：編譯期 handler 發現、`[DecorateWith<...>]` 佈線，透過 `UseGenerators()` 提供 reflection-free 的 `ISender`/`IStreamSender`/`IPublisher`。 |
 | `Davish.Sendr.Message` | 2.0.0 | 已棄用 | `ICommand`/`ICommandHandler`/`IQuery`/`IQueryHandler` 的相容性用殼，現在移到 `Davish.Sendr.Abstractions`。沒有自己的內容；未來的主要版本會移除。 |
 | `Davish.Sendr.Notification` | 3.0.0 | 已棄用 | Notification 發佈（`IPublisher`、`AddSendrNotification`、`AddNotificationHandler` 等）的相容性用殼，現在移到 `Davish.Sendr`。沒有自己的內容；未來的主要版本會移除。 |
 | `Davish.Sendr.Notification.Abstractions` | 4.0.0 | 已棄用 | `INotification`/`INotificationHandler`/`INotificationDecorator`/`IPublisher` 合約的相容性用殼，現在移到 `Davish.Sendr.Abstractions`。沒有自己的內容；未來的主要版本會移除。 |
