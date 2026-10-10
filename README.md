@@ -20,6 +20,7 @@ Sendr is a small mediator library designed to limit allocations. It supports req
 - Wrap compatible request, stream, or notification handlers with a reusable, non-generic decorator.
 - Register handlers manually or use compile-time discovery. Neither path scans assemblies at runtime.
 - Enable reflection-free `ISender`/`IStreamSender` dispatch with `Davish.Sendr.Generators` and `AddSendr(o => o.UseGenerators())`.
+- Emit an `Activity` per request, command, query, and notification dispatch for OpenTelemetry tracing. See [Tracing](#tracing).
 - Target `netstandard2.0` and `net10.0`.
 - Reference `Davish.Sendr.Abstractions` for domain contracts and `Davish.Sendr` for the request/response and notification implementations.
 
@@ -208,8 +209,8 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 `Davish.Sendr.Generators` discovers your request, command, query, and stream handler implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr`. It registers the discovered handlers and installs a reflection-free `ISender`/`IStreamSender`. Dispatch uses generated dictionaries keyed by message type and, where applicable, response type.
 
 ```xml
-<PackageReference Include="Davish.Sendr" Version="3.5.0" />
-<PackageReference Include="Davish.Sendr.Generators" Version="2.1.0" PrivateAssets="all" />
+<PackageReference Include="Davish.Sendr" Version="3.6.0" />
+<PackageReference Include="Davish.Sendr.Generators" Version="2.2.0" PrivateAssets="all" />
 ```
 
 ```csharp
@@ -267,6 +268,43 @@ Notes:
 - A handler discovered this way must be accessible from the calling project: public (including every containing type, for a nested handler), or internal with a matching `[assembly: InternalsVisibleTo("...")]` declared by the library. Otherwise it's a compile error (`SENDR007`) rather than an invisible handler.
 - Each compilation has one set of generated dispatch tables for `ISender`/`IStreamSender` and a separate set for `IPublisher`. Each uses the assemblies declared in its own `UseGenerators()` configuration. You can include the same library on both sides. Multiple calls configuring the same sender or publisher must declare identical assembly sets; conflicting sets produce compile error `SENDR006`.
 - Duplicate handlers for a request/response pair produce `SENDR002` whether they are local, in an included assembly, or spread across assemblies.
+
+## Tracing
+
+`ISender.SendAsync` (requests, commands, queries) and `IPublisher.PublishAsync` (notifications) emit `Activity` spans from an `ActivitySource` named `Davish.Sendr`. Nothing is emitted, and no `Activity` is created, until a listener subscribes to that name:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t
+        .AddSource(SendrActivitySource.Name) // "Davish.Sendr"
+        .AddOtlpExporter());
+```
+
+Each span is `ActivityKind.Internal` and nests under whatever `Activity` is current at the call site, such as an ASP.NET Core request.
+
+| Span | Name | Emitted for |
+| --- | --- | --- |
+| Send | `Send <RequestTypeName>` | each request, command, or query |
+| Publish | `Publish <NotificationTypeName>` | each `PublishAsync` that has at least one handler |
+| Handle | `Handle <HandlerTypeName>` | each notification handler, including its decorators; a child of the Publish span |
+
+A `PublishAsync` for a notification with no handlers emits nothing. Sequence handlers are siblings under the Publish span, not nested in one another, and Parallel handlers overlap in time.
+
+| Tag | On | Value |
+| --- | --- | --- |
+| `sendr.kind` | all | `request`, `command`, `query`, `notification`, or `notification.handler` |
+| `sendr.request.type` | Send, Publish | Full name of the request or notification type |
+| `sendr.handler.type` | Handle | Full name of the handler type |
+| `sendr.notification.group` | Handle | `sequence` or `parallel` |
+| `error.type` | any | Exception type full name, set only on failure (the span status is also `Error`) |
+
+A failed handler marks only its own Handle span as `Error`; the Publish span is `Error` when any handler failed, and its `error.type` is the exception that `PublishAsync` throws (`AggregateException` when several handlers failed). Cancellation (`OperationCanceledException`) is recorded as an error like any other exception.
+
+> [!NOTE]
+> Both the reflection-based and the generated sender and publisher emit these spans. Generated code needs `Davish.Sendr` 3.6.0 or later at runtime, because it calls `SendrActivitySource`. Stream requests are not traced yet.
+
+> [!NOTE]
+> While a listener is subscribed, an exception that a handler (or a missing-handler check) throws synchronously is delivered through the returned `Task` instead, for sends and for notification handler steps, so `await` observes it the same way. Without a listener, behavior is unchanged.
 
 ## Streams
 

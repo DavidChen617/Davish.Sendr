@@ -208,6 +208,71 @@ public class StreamBenchmark
     }
 }
 
+[MemoryDiagnoser]
+public class NotificationBenchmark
+{
+    private readonly NotifBench_One _one = new();
+    private readonly NotifBench_Two _two = new();
+    private readonly NotifBench_OneHandler _directHandler = new();
+    private IPublisher _publisher = null!;
+    private IPublisher _generatedPublisher = null!;
+
+    [GlobalSetup]
+    public void SetUp()
+    {
+        _publisher = new ServiceCollection()
+            .AddSendrNotification()
+            .AddNotificationHandler<NotifBench_One>(x => x.Handler.Sequence.With<NotifBench_OneHandler>())
+            .AddNotificationHandler<NotifBench_Two>(x => x.Handler.Sequence
+                .With<NotifBench_TwoHandlerA>()
+                .With<NotifBench_TwoHandlerB>())
+            .BuildServiceProvider()
+            .GetRequiredService<IPublisher>();
+
+        _generatedPublisher = new ServiceCollection()
+            .AddSendrNotification(o => o.UseGenerators())
+            .BuildServiceProvider()
+            .GetRequiredService<IPublisher>();
+    }
+
+    [Benchmark(Baseline = true)]
+    public Task DirectCall_OneHandler() => _directHandler.HandleAsync(_one, default);
+
+    [Benchmark]
+    public Task Publisher_OneHandler() => _publisher.PublishAsync(_one, default);
+
+    [Benchmark]
+    public Task GeneratedPublisher_OneHandler() => _generatedPublisher.PublishAsync(_one, default);
+
+    [Benchmark]
+    public Task Publisher_TwoHandlers() => _publisher.PublishAsync(_two, default);
+
+    [Benchmark]
+    public Task GeneratedPublisher_TwoHandlers() => _generatedPublisher.PublishAsync(_two, default);
+}
+
+public sealed record NotifBench_One : INotification;
+
+public sealed class NotifBench_OneHandler : INotificationHandler<NotifBench_One>
+{
+    public Task HandleAsync(NotifBench_One notification, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+}
+
+public sealed record NotifBench_Two : INotification;
+
+public sealed class NotifBench_TwoHandlerA : INotificationHandler<NotifBench_Two>
+{
+    public Task HandleAsync(NotifBench_Two notification, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+}
+
+public sealed class NotifBench_TwoHandlerB : INotificationHandler<NotifBench_Two>
+{
+    public Task HandleAsync(NotifBench_Two notification, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+}
+
 public sealed record DirectCall_Query;
 
 public sealed record DirectCall_QueryDto;

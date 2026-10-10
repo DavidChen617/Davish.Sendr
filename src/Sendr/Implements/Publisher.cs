@@ -8,8 +8,14 @@ internal sealed class Publisher(IServiceProvider sp, NotificationHandlersRegistr
             throw new ArgumentNullException(nameof(notification));
 
         var handlers = (NotificationHandlersBase?)sp.GetService(registry.GetClosedType(notification.GetType()));
-        return handlers is null
-            ? Task.CompletedTask
-            : handlers.PublishAsync(notification, sp, cancellationToken);
+        if (handlers is null)
+            return Task.CompletedTask;
+
+        if (!SendrActivitySource.IsEnabled)
+            return handlers.PublishAsync(notification, sp, cancellationToken);
+
+        return SendrActivitySource.Invoke(SendrActivitySource.NotificationKind, notification.GetType(),
+            (handlers, sp, notification, cancellationToken),
+            static s => s.handlers.PublishAsync(s.notification, s.sp, s.cancellationToken));
     }
 }
