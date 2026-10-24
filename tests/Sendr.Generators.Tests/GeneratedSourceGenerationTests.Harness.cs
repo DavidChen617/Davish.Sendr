@@ -55,11 +55,6 @@ public partial class GeneratedSourceGenerationTests
     private static GeneratorRun RunHost(string body, string declarations = "", params MetadataReference[] references) =>
         GeneratorHarness.Run(GeneratorHarness.Compile("Host", Host(body, declarations), references));
 
-    // The generator drops the diagnostics it builds for handlers declared in this compilation (it only reports
-    // those for included assemblies), so these scenarios fail today. They move to that fix change unchanged.
-    private const string LocalDiagnosticsNotReported =
-        "Local handler diagnostics are not reported yet; see openspec change fix-generator-local-diagnostics.";
-
     // ---- Discovery rules ----
 
     public static TheoryData<string> NonInstantiableShapes => new() { "abstract class", "interface" };
@@ -87,7 +82,7 @@ public partial class GeneratedSourceGenerationTests
 
     public static TheoryData<string> ValueTypeShapes => new() { "struct", "record struct" };
 
-    [Theory(Skip = LocalDiagnosticsNotReported)]
+    [Theory]
     [MemberData(nameof(ValueTypeShapes))]
     public void GivenValueTypeHandler_WhenGeneratorRuns_ThenSendr004ErrorIsReportedAndItIsNotDiscovered(string shape)
     {
@@ -110,7 +105,7 @@ public partial class GeneratedSourceGenerationTests
             .Run();
     }
 
-    [Fact(Skip = LocalDiagnosticsNotReported)]
+    [Fact]
     public void GivenOpenGenericHandler_WhenGeneratorRuns_ThenSendr003InfoIsReportedAndItIsSkipped()
     {
         new Scenario()
@@ -288,7 +283,7 @@ public partial class GeneratedSourceGenerationTests
         }
         """;
 
-    [Fact(Skip = LocalDiagnosticsNotReported)]
+    [Fact]
     public void GivenClassWithSeveralDecorateWithAttributes_WhenGeneratorRuns_ThenEachAttributeGetsSendr001()
     {
         new Scenario()
@@ -358,7 +353,7 @@ public partial class GeneratedSourceGenerationTests
 
     public static TheoryData<string> HandlerKindNames => new(HandlerKinds.Keys);
 
-    [Theory(Skip = LocalDiagnosticsNotReported)]
+    [Theory]
     [MemberData(nameof(HandlerKindNames))]
     public void GivenDecoratorMissingRequiredDecoratorInterface_WhenGeneratorRuns_ThenSendr001NamesRequiredInterface(string kind)
     {
