@@ -15,11 +15,8 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Benchmark/Benchmark.csproj" />
-    <Project Path="tests/Message.Tests/Message.Tests.csproj" />
-    <Project Path="tests/Notification.Tests/Notification.Tests.csproj" />
-    <Project Path="tests/UnitTests/UnitTests.csproj" />
-    <Project Path="tests/Generator.Tests/Generator.Tests.csproj" />
     <Project Path="tests/Generator.Tests.HandlerLibrary/Generator.Tests.HandlerLibrary.csproj" />
-    <Project Path="tests/AbstractionsConsumer.Tests/AbstractionsConsumer.Tests.csproj" />
+    <Project Path="tests/Sendr.Tests/Sendr.Tests.csproj" />
+    <Project Path="tests/Sendr.Generators.Tests/Sendr.Generators.Tests.csproj" />
   </Folder>
 </Solution>
