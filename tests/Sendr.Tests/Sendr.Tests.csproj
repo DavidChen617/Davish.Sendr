@@ -32,7 +32,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sendr\Sendr.csproj" />
-    <ProjectReference Include="..\..\src\Sendr.Shared\Sendr.Shared.csproj" />
   </ItemGroup>
 
 </Project>

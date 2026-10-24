@@ -33,7 +33,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sendr\Sendr.csproj" />
-    <ProjectReference Include="..\..\src\Sendr.Shared\Sendr.Shared.csproj" />
     <!--
       ReferenceOutputAssembly is true (not just an analyzer) so tests can drive
       SendrSourceGenerator directly via GeneratorDriver against in-memory compilations, in addition

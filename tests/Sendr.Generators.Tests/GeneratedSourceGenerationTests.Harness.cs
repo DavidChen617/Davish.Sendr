@@ -715,7 +715,7 @@ public partial class GeneratedSourceGenerationTests
     public void GivenHostCompilation_WhenGeneratorOutputIsCompiledWithIt_ThenThereAreNoErrorsOrWarnings(string host)
     {
         new Scenario()
-            .Given($"A host with {host}, referencing Sendr, Sendr.Abstractions and Sendr.Shared", () => host)
+            .Given($"A host with {host}, referencing Sendr and Sendr.Abstractions", () => host)
             .When("The generator runs and its output is compiled with the host", h => h switch
             {
                 "no handlers" => RunHost("services.AddSendr(o => o.UseGenerators()); services.AddSendrNotification(o => o.UseGenerators());"),

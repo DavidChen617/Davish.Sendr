@@ -38,6 +38,14 @@ public class ContractsTests
         typeof(RequestHandlerDelegate<>),
         typeof(StreamHandlerDelegate<>),
         typeof(NotificationHandlerDelegate),
+        typeof(DecorateWithAttribute<>),
+        typeof(DecorateWithAttribute<,>),
+        typeof(DecorateWithAttribute<,,>),
+        typeof(DecorateWithAttribute<,,,>),
+        typeof(DecorateWithAttribute<,,,,>),
+        typeof(DecorateWithAttribute<,,,,,>),
+        typeof(DecorateWithAttribute<,,,,,,>),
+        typeof(DecorateWithAttribute<,,,,,,,>),
     };
 
     [Theory]
@@ -60,19 +68,6 @@ public class ContractsTests
             .When("Its referenced assemblies are listed", ReferencedAssemblyNames)
             .Then("The implementation assembly is not among them")
                 .DoesNotContain("Davish.Sendr is not referenced", "Davish.Sendr", names => names)
-            .Run();
-    }
-
-    [Fact]
-    public void GivenDecorateWithAttribute_WhenInspectingItsAssembly_ThenItIsDavishSendrSharedWithoutReferenceToDavishSendr()
-    {
-        new Scenario()
-            .Given("The DecorateWith attribute type, shipped inside the abstractions package", () => typeof(DecorateWithAttribute<>).Assembly)
-            .When("Its assembly is inspected", assembly => (Name: assembly.GetName().Name, References: ReferencedAssemblyNames(assembly)))
-            .Then("It lives in the shared assembly")
-                .Equal("The assembly is Davish.Sendr.Shared", "Davish.Sendr.Shared", inspected => inspected.Name)
-            .And("That assembly does not reference the implementation")
-                .DoesNotContain("Davish.Sendr is not referenced", "Davish.Sendr", inspected => inspected.References)
             .Run();
     }
 
