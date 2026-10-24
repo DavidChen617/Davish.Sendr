@@ -209,8 +209,8 @@ public sealed class LoggingDecorator(ILogger<LoggingDecorator> logger)
 `Davish.Sendr.Generators` discovers your request, command, query, and stream handler implementations at compile time and generates `UseGenerators()`, a `SendrOptions` extension that plugs into `AddSendr`. It registers the discovered handlers and installs a reflection-free `ISender`/`IStreamSender`. Dispatch uses generated dictionaries keyed by message type and, where applicable, response type.
 
 ```xml
-<PackageReference Include="Davish.Sendr" Version="3.6.0" />
-<PackageReference Include="Davish.Sendr.Generators" Version="2.2.0" PrivateAssets="all" />
+<PackageReference Include="Davish.Sendr" Version="4.1.0" />
+<PackageReference Include="Davish.Sendr.Generators" Version="4.1.0" PrivateAssets="all" />
 ```
 
 ```csharp

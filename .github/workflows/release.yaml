@@ -1,12 +1,12 @@
-name: CI
+name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,22 +22,28 @@ jobs:
             10.0.x
             11.0.x
 
+      # The version comes from src/Directory.Build.props; the tag only triggers and must match it.
+      - name: Check tag matches version
+        run: |
+          version=$(dotnet msbuild src/Sendr/Sendr.csproj -getProperty:Version)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match project version $version"
+            exit 1
+          fi
+
       - name: Build
         run: dotnet build -c Release
 
       - name: Test
-        run: dotnet test -c Release
+        run: dotnet test -c Release --no-build
 
       - name: Pack
         run: |
           for proj in \
             src/Sendr.Abstractions/Sendr.Abstractions.csproj \
             src/Sendr/Sendr.csproj \
-            src/Sendr.Generators/Sendr.Generators.csproj \
-            src/Sendr.Notification.Abstractions/Sendr.Notification.Abstractions.csproj \
-            src/Sendr.Notification/Sendr.Notification.csproj \
-            src/Sendr.Message/Sendr.Message.csproj; do
-            dotnet pack "$proj" -c Release -o out
+            src/Sendr.Generators/Sendr.Generators.csproj; do
+            dotnet pack "$proj" -c Release --no-build -o out
           done
 
       - name: NuGet login (OIDC)
