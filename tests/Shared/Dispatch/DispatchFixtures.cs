@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Davish.Sendr;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,10 +20,25 @@ public sealed class DispatchProbe
     public List<(string Step, CancellationToken Token)> Tokens { get; } = [];
     public List<ScopedMarker> ScopedSeen { get; } = [];
 
+    /// <summary><see cref="Activity.Current"/> as each step saw it while running.</summary>
+    public List<(string Step, Activity? Current)> Activities { get; } = [];
+
     /// <summary>When set, request handlers fail with it, and stream handlers fail with it after <see cref="FailAfterItems"/> items.</summary>
     public Exception? Failure { get; set; }
 
     public int FailAfterItems { get; set; }
+
+    /// <summary>Makes request handlers throw <see cref="Failure"/> from HandleAsync itself, before returning a task.</summary>
+    public bool ThrowSynchronously { get; set; }
+
+    /// <summary>Makes request handlers end with an OperationCanceledException.</summary>
+    public bool Cancel { get; set; }
+
+    /// <summary>When set, request handlers wait for it before finishing.</summary>
+    public TaskCompletionSource? Gate { get; set; }
+
+    /// <summary>Makes request handlers return an already completed task.</summary>
+    public bool CompleteSynchronously { get; set; }
 
     public void Record<T>(List<T> list, T item)
     {
@@ -84,14 +100,45 @@ public abstract class ProbeHandler
         probe.Record(probe.HandlersConstructed, this);
     }
 
-    protected async Task Handle(CancellationToken cancellationToken)
+    // Not async, so ThrowSynchronously can throw from HandleAsync before any task exists.
+    protected Task Handle(CancellationToken cancellationToken)
+    {
+        Begin(cancellationToken);
+        return FinishAsync();
+    }
+
+    protected Task<TResponse> Handle<TResponse>(CancellationToken cancellationToken, TResponse response)
+    {
+        Begin(cancellationToken);
+        return FinishAsync(response);
+    }
+
+    private void Begin(CancellationToken cancellationToken)
     {
         _probe.Record(_probe.Handled, GetType().Name);
         _probe.Record(_probe.Tokens, ("handler", cancellationToken));
         _probe.Record(_probe.ScopedSeen, _scoped);
-        await Task.Yield();
+        _probe.Record(_probe.Activities, ("handler", Activity.Current));
+        if (_probe.ThrowSynchronously)
+            throw _probe.Failure!;
+    }
+
+    private async Task FinishAsync()
+    {
+        if (_probe.Gate is { } gate)
+            await gate.Task;
+        if (!_probe.CompleteSynchronously)
+            await Task.Yield();
+        if (_probe.Cancel)
+            throw new OperationCanceledException();
         if (_probe.Failure is { } failure)
             throw failure;
+    }
+
+    private async Task<TResponse> FinishAsync<TResponse>(TResponse response)
+    {
+        await FinishAsync();
+        return response;
     }
 
     protected async IAsyncEnumerable<TItem> Stream<TItem>(int count, Func<int, TItem> item, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -121,11 +168,7 @@ public sealed class ProbeRequestHandler(DispatchProbe probe, ScopedMarker scoped
 public sealed class ProbeRequestForValueHandler(DispatchProbe probe, ScopedMarker scoped)
     : ProbeHandler(probe, scoped), IRequestHandler<ProbeRequestForValue, int>
 {
-    public async Task<int> HandleAsync(ProbeRequestForValue request, CancellationToken cancellationToken)
-    {
-        await Handle(cancellationToken);
-        return request.Value * 2;
-    }
+    public Task<int> HandleAsync(ProbeRequestForValue request, CancellationToken cancellationToken) => Handle(cancellationToken, request.Value * 2);
 }
 
 [DecorateWith<ProbeOuterDecorator, ProbeInnerDecorator>]
@@ -139,22 +182,14 @@ public sealed class ProbeCommandHandler(DispatchProbe probe, ScopedMarker scoped
 public sealed class ProbeCommandForValueHandler(DispatchProbe probe, ScopedMarker scoped)
     : ProbeHandler(probe, scoped), ICommandHandler<ProbeCommandForValue, int>
 {
-    public async Task<int> HandleAsync(ProbeCommandForValue command, CancellationToken cancellationToken)
-    {
-        await Handle(cancellationToken);
-        return command.Value * 2;
-    }
+    public Task<int> HandleAsync(ProbeCommandForValue command, CancellationToken cancellationToken) => Handle(cancellationToken, command.Value * 2);
 }
 
 [DecorateWith<ProbeOuterDecorator, ProbeInnerDecorator>]
 public sealed class ProbeQueryHandler(DispatchProbe probe, ScopedMarker scoped)
     : ProbeHandler(probe, scoped), IQueryHandler<ProbeQuery, int>
 {
-    public async Task<int> HandleAsync(ProbeQuery query, CancellationToken cancellationToken)
-    {
-        await Handle(cancellationToken);
-        return query.Value * 2;
-    }
+    public Task<int> HandleAsync(ProbeQuery query, CancellationToken cancellationToken) => Handle(cancellationToken, query.Value * 2);
 }
 
 [DecorateWith<ProbeOuterDecorator, ProbeInnerDecorator>]
@@ -263,7 +298,11 @@ public abstract class ProbeDecorator :
         probe.Record(probe.DecoratorsConstructed, this);
     }
 
-    private void Record(CancellationToken cancellationToken) => _probe.Record(_probe.Tokens, (_step, cancellationToken));
+    private void Record(CancellationToken cancellationToken)
+    {
+        _probe.Record(_probe.Tokens, (_step, cancellationToken));
+        _probe.Record(_probe.Activities, (_step, Activity.Current));
+    }
 
     Task IRequestDecorator.HandleAsync<TRequest>(TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
     {
@@ -343,6 +382,8 @@ public static class DispatchProbeRegistration
 /// <summary>One SendAsync overload, with every way the request-dispatch tests need to call it.</summary>
 public sealed record DispatchCase(
     string Overload,
+    Type MessageType,
+    string SpanKind,
     string HandlerName,
     bool HasResponse,
     string NullParamName,
@@ -359,35 +400,35 @@ public static class DispatchCases
     public static readonly IReadOnlyDictionary<string, DispatchCase> All = new[]
     {
         new DispatchCase(
-            "SendAsync(IRequest)", nameof(ProbeRequestHandler), HasResponse: false, "request", "AddRequestHandler", typeof(OrphanRequest),
+            "SendAsync(IRequest)", typeof(ProbeRequest), "request", nameof(ProbeRequestHandler), HasResponse: false, "request", "AddRequestHandler", typeof(OrphanRequest),
             async (s, v, ct) => { await s.SendAsync(new ProbeRequest(v), ct); return null; },
             async (s, v, ct) => { IRequest m = new ProbeRequest(v); await s.SendAsync(m, ct); return null; },
             async (s, v, ct) => { ProbeRequestBase m = new ProbeRequest(v); await s.SendAsync(m, ct); return null; },
             (s, ct) => s.SendAsync((IRequest)null!, ct),
             (s, ct) => s.SendAsync(new OrphanRequest(), ct)),
         new DispatchCase(
-            "SendAsync(IRequest<T>)", nameof(ProbeRequestForValueHandler), HasResponse: true, "request", "AddRequestHandler", typeof(OrphanRequestForValue),
+            "SendAsync(IRequest<T>)", typeof(ProbeRequestForValue), "request", nameof(ProbeRequestForValueHandler), HasResponse: true, "request", "AddRequestHandler", typeof(OrphanRequestForValue),
             async (s, v, ct) => await s.SendAsync(new ProbeRequestForValue(v), ct),
             async (s, v, ct) => { IRequest<int> m = new ProbeRequestForValue(v); return await s.SendAsync(m, ct); },
             async (s, v, ct) => { ProbeRequestForValueBase m = new ProbeRequestForValue(v); return await s.SendAsync(m, ct); },
             (s, ct) => s.SendAsync((IRequest<int>)null!, ct),
             (s, ct) => s.SendAsync(new OrphanRequestForValue(), ct)),
         new DispatchCase(
-            "SendAsync(ICommand)", nameof(ProbeCommandHandler), HasResponse: false, "command", "AddCommandHandler", typeof(OrphanCommand),
+            "SendAsync(ICommand)", typeof(ProbeCommand), "command", nameof(ProbeCommandHandler), HasResponse: false, "command", "AddCommandHandler", typeof(OrphanCommand),
             async (s, v, ct) => { await s.SendAsync(new ProbeCommand(v), ct); return null; },
             async (s, v, ct) => { ICommand m = new ProbeCommand(v); await s.SendAsync(m, ct); return null; },
             async (s, v, ct) => { ProbeCommandBase m = new ProbeCommand(v); await s.SendAsync(m, ct); return null; },
             (s, ct) => s.SendAsync((ICommand)null!, ct),
             (s, ct) => s.SendAsync(new OrphanCommand(), ct)),
         new DispatchCase(
-            "SendAsync(ICommand<T>)", nameof(ProbeCommandForValueHandler), HasResponse: true, "command", "AddCommandHandler", typeof(OrphanCommandForValue),
+            "SendAsync(ICommand<T>)", typeof(ProbeCommandForValue), "command", nameof(ProbeCommandForValueHandler), HasResponse: true, "command", "AddCommandHandler", typeof(OrphanCommandForValue),
             async (s, v, ct) => await s.SendAsync(new ProbeCommandForValue(v), ct),
             async (s, v, ct) => { ICommand<int> m = new ProbeCommandForValue(v); return await s.SendAsync(m, ct); },
             async (s, v, ct) => { ProbeCommandForValueBase m = new ProbeCommandForValue(v); return await s.SendAsync(m, ct); },
             (s, ct) => s.SendAsync((ICommand<int>)null!, ct),
             (s, ct) => s.SendAsync(new OrphanCommandForValue(), ct)),
         new DispatchCase(
-            "SendAsync(IQuery<T>)", nameof(ProbeQueryHandler), HasResponse: true, "query", "AddQueryHandler", typeof(OrphanQuery),
+            "SendAsync(IQuery<T>)", typeof(ProbeQuery), "query", nameof(ProbeQueryHandler), HasResponse: true, "query", "AddQueryHandler", typeof(OrphanQuery),
             async (s, v, ct) => await s.SendAsync(new ProbeQuery(v), ct),
             async (s, v, ct) => { IQuery<int> m = new ProbeQuery(v); return await s.SendAsync(m, ct); },
             async (s, v, ct) => { ProbeQueryBase m = new ProbeQuery(v); return await s.SendAsync(m, ct); },

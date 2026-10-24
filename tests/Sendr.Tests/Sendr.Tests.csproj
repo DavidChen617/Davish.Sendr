@@ -15,6 +15,9 @@
   <ItemGroup>
     <Compile Include="..\Shared\Features\*.cs" Link="Features\%(Filename)%(Extension)" />
     <Compile Include="..\Shared\Dispatch\*.cs" Link="Dispatch\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Pipeline\*.cs" Link="Pipeline\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Notification\*.cs" Link="Notification\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Tracing\*.cs" Link="Tracing\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

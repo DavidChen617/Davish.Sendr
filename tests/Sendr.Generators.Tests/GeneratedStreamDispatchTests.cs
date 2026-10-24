@@ -1,5 +1,6 @@
 using Davish.JustBdd;
 using Davish.Sendr;
+using Generator.Tests.HandlerLibrary;
 using Microsoft.Extensions.DependencyInjection;
 using Sendr.TestFeatures;
 using Sendr.TestFixtures;
@@ -11,7 +12,7 @@ namespace Sendr.Generators.Tests;
 public class GeneratedStreamDispatchTests : StreamDispatchSpec
 {
     protected override IServiceCollection AddSenderUnderTest(IServiceCollection services) =>
-        services.AddSendr(o => o.UseGenerators());
+        services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>()));
 
     [Fact]
     public async Task GivenNoStreamHandlerDiscovered_WhenEnumerated_ThenMessageSaysNotDiscoveredBySourceGenerator()

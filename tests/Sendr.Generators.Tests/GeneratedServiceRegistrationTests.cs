@@ -1,5 +1,6 @@
 using Davish.JustBdd;
 using Davish.Sendr;
+using Generator.Tests.HandlerLibrary;
 using Microsoft.Extensions.DependencyInjection;
 using Sendr.TestFeatures;
 
@@ -13,7 +14,7 @@ public class GeneratedServiceRegistrationTests
     {
         new Scenario()
             .Given("AddSendr(o => o.UseGenerators())", () =>
-                new ServiceCollection().AddSendr(o => o.UseGenerators()).BuildServiceProvider())
+                new ServiceCollection().AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>())).BuildServiceProvider())
             .When("ISender is resolved from a scope", provider =>
                 provider.CreateScope().ServiceProvider.GetRequiredService<ISender>())
             .Then("A sender is returned")
@@ -26,7 +27,7 @@ public class GeneratedServiceRegistrationTests
     {
         new Scenario()
             .Given<ScopedResolution<ISender>>("AddSendr(o => o.UseGenerators())", ctx =>
-                ctx.Provider = new ServiceCollection().AddSendr(o => o.UseGenerators()).BuildServiceProvider())
+                ctx.Provider = new ServiceCollection().AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>())).BuildServiceProvider())
             .When("ISender is resolved twice in one scope and once in another", ctx => ctx.ResolveAcrossScopes())
             .Then("The instance is shared within a scope")
                 .True("Both resolutions in the first scope are the same object", ctx => ReferenceEquals(ctx.First, ctx.SecondInSameScope))
@@ -40,7 +41,7 @@ public class GeneratedServiceRegistrationTests
     {
         new Scenario()
             .Given("AddSendrNotification(o => o.UseGenerators())", () =>
-                new ServiceCollection().AddSendrNotification(o => o.UseGenerators()).BuildServiceProvider())
+                new ServiceCollection().AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>())).BuildServiceProvider())
             .When("IPublisher is resolved from a scope", provider =>
                 provider.CreateScope().ServiceProvider.GetRequiredService<IPublisher>())
             .Then("A publisher is returned")
@@ -53,7 +54,7 @@ public class GeneratedServiceRegistrationTests
     {
         new Scenario()
             .Given<ScopedResolution<IPublisher>>("AddSendrNotification(o => o.UseGenerators())", ctx =>
-                ctx.Provider = new ServiceCollection().AddSendrNotification(o => o.UseGenerators()).BuildServiceProvider())
+                ctx.Provider = new ServiceCollection().AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<HandlerLibraryMarker>())).BuildServiceProvider())
             .When("IPublisher is resolved twice in one scope and once in another", ctx => ctx.ResolveAcrossScopes())
             .Then("The instance is shared within a scope")
                 .True("Both resolutions in the first scope are the same object", ctx => ReferenceEquals(ctx.First, ctx.SecondInSameScope))

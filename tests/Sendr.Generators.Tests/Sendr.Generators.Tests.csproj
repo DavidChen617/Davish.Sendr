@@ -15,6 +15,9 @@
   <ItemGroup>
     <Compile Include="..\Shared\Features\*.cs" Link="Features\%(Filename)%(Extension)" />
     <Compile Include="..\Shared\Dispatch\*.cs" Link="Dispatch\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Pipeline\*.cs" Link="Pipeline\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Notification\*.cs" Link="Notification\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Tracing\*.cs" Link="Tracing\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +26,7 @@
 
   <ItemGroup>
     <PackageReference Include="Davish.JustBdd.XunitV3" Version="0.2.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.1" />
   </ItemGroup>
