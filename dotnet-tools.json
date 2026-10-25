@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "davish.justbdd.tool": {
+      "version": "0.2.0",
+      "commands": [
+        "justbdd"
+      ],
+      "rollForward": false
+    }
+  }
+}

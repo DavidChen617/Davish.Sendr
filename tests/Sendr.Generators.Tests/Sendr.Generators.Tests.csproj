@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Features\*.cs" Link="Features\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Dispatch\*.cs" Link="Dispatch\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Pipeline\*.cs" Link="Pipeline\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Notification\*.cs" Link="Notification\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Tracing\*.cs" Link="Tracing\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Davish.JustBdd.XunitV3" Version="0.2.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sendr\Sendr.csproj" />
+    <!--
+      ReferenceOutputAssembly is true (not just an analyzer) so tests can drive
+      SendrSourceGenerator directly via GeneratorDriver against in-memory compilations, in addition
+      to it running as a real analyzer against this project's own source (which the rest of the
+      tests in this project exercise).
+    -->
+    <ProjectReference Include="..\..\src\Sendr.Generators\Sendr.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    <!--
+      Deliberately NOT an Analyzer reference — this is the "host" side of the cross-assembly
+      integration fixture, referencing a library whose own build never ran Sendr.Generators.
+    -->
+    <ProjectReference Include="..\Generator.Tests.HandlerLibrary\Generator.Tests.HandlerLibrary.csproj" />
+  </ItemGroup>
+
+</Project>

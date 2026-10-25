@@ -9,8 +9,6 @@
 
     <ProjectReference Include="..\..\src\Sendr.Abstractions\Sendr.Abstractions.csproj" />
 
-    <ProjectReference Include="..\..\src\Sendr.Shared\Sendr.Shared.csproj" />
-
     <ProjectReference Include="..\..\src\Sendr.Generators\Sendr.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />

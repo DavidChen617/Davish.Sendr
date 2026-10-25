@@ -585,6 +585,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             externalResultsByAssembly[assembly] = builder.ToImmutable();
         }
 
+        // Local handlers' own problems (SENDR001/003/004/007) are reported the same way as an included
+        // assembly's; otherwise the handler is silently left out, or dispatched without its decorators.
+        foreach (var result in localResults)
+            foreach (var diagnostic in result.Diagnostics)
+                spc.ReportDiagnostic(diagnostic);
+
         foreach (var results in externalResultsByAssembly.Values)
             foreach (var result in results)
                 foreach (var diagnostic in result.Diagnostics)

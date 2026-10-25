@@ -40,6 +40,9 @@ dotnet_sort_system_directives_first = true
 file_header_template = unset
 dotnet_diagnostic.IDE0005.severity = warning
 
+# A Davish.JustBdd scenario that never calls Run()/RunAsync() executes nothing and always passes
+dotnet_diagnostic.JBDD001.severity = error
+
 # this. and Me. preferences
 dotnet_style_qualification_for_event = false:silent
 dotnet_style_qualification_for_field = false:silent
