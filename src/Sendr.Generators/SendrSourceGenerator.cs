@@ -206,6 +206,18 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         symbol.Locations.FirstOrDefault(l => l.IsInSource && compilation.ContainsSyntaxTree(l.SourceTree)) ??
         fallbackLocation ?? Location.None;
 
+    /// <summary>
+    /// Where to report a diagnostic about <paramref name="attribute"/>: its own syntax when that is part
+    /// of <paramref name="compilation"/>, otherwise the same fallback <see cref="LocationInCompilation"/>
+    /// uses. An attribute on a type from a live <see cref="CompilationReference"/> carries syntax from
+    /// that other compilation, which <see cref="SourceProductionContext.ReportDiagnostic"/> rejects.
+    /// </summary>
+    private static Location AttributeLocation(
+        AttributeData attribute, INamedTypeSymbol classSymbol, Compilation compilation, Location? fallbackLocation) =>
+        attribute.ApplicationSyntaxReference is { } syntaxRef && compilation.ContainsSyntaxTree(syntaxRef.SyntaxTree)
+            ? syntaxRef.GetSyntax().GetLocation()
+            : LocationInCompilation(classSymbol, compilation, fallbackLocation);
+
     private static AnalysisResult BuildModel(
         INamedTypeSymbol classSymbol,
         INamedTypeSymbol interfaceSymbol,
@@ -301,9 +313,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         {
             foreach (var extra in matches)
             {
-                var location = extra.ApplicationSyntaxReference is { } syntaxRef
-                    ? syntaxRef.GetSyntax().GetLocation()
-                    : LocationInCompilation(classSymbol, compilation, fallbackLocation);
+                var location = AttributeLocation(extra, classSymbol, compilation, fallbackLocation);
                 diagnostics.Add(Diagnostic.Create(DiagnosticDescriptors.InvalidDecorator, location,
                     $"'{classSymbol.ToDisplayString()}' has more than one [DecorateWith<...>]. " +
                     "Combine them into a single attribute, e.g. [DecorateWith<TransactionDecorator, LoggingDecorator>]."));
@@ -314,9 +324,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
 
         var attribute = matches[0];
         var attributeClass = attribute.AttributeClass!;
-        var location2 = attribute.ApplicationSyntaxReference is { } syntaxRef2
-            ? syntaxRef2.GetSyntax().GetLocation()
-            : LocationInCompilation(classSymbol, compilation, fallbackLocation);
+        var location2 = AttributeLocation(attribute, classSymbol, compilation, fallbackLocation);
 
         var decorators = ImmutableArray.CreateBuilder<DecoratorRef>();
 
