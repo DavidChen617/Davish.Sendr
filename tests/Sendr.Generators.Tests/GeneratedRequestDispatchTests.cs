@@ -26,6 +26,8 @@ public class GeneratedRequestDispatchTests : RequestDispatchSpec
             .ThenThrows<InvalidOperationException>("The missing handler is reported")
                 .Contains("The message points at the source generator", "discovered by the source generator", thrown => thrown.Exception.Message)
                 .Contains("The message names the message type", dispatch.OrphanType.ToString(), thrown => thrown.Exception.Message)
+                .Contains("The message says manual registration means dropping UseGenerators()", "stop calling UseGenerators()", thrown => thrown.Exception.Message)
+                .DoesNotContain("The message no longer suggests registering manually alongside UseGenerators()", "instead of relying on UseGenerators()", thrown => thrown.Exception.Message)
                 .DoesNotContain("The message does not suggest AddRequestHandler", "AddRequestHandler", thrown => thrown.Exception.Message)
                 .DoesNotContain("The message does not suggest AddCommandHandler", "AddCommandHandler", thrown => thrown.Exception.Message)
                 .DoesNotContain("The message does not suggest AddQueryHandler", "AddQueryHandler", thrown => thrown.Exception.Message)

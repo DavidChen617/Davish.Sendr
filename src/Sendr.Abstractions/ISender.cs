@@ -24,6 +24,12 @@ public interface IStreamSender
 /// requests without resolving a separate service. Resolve an instance from the service provider
 /// after calling <c>AddSendr</c>.
 /// </summary>
+/// <remarks>
+/// <c>SendAsync</c> throws synchronously only for a <see langword="null"/> message
+/// (<see cref="ArgumentNullException"/>). Every other failure — no handler, a handler or decorator
+/// that cannot be resolved, or one that throws — is reported through the returned task, whether or
+/// not tracing is enabled.
+/// </remarks>
 public interface ISender : IStreamSender
 {
     /// <summary>

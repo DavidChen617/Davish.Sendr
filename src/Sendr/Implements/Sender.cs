@@ -8,9 +8,17 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
             throw new ArgumentNullException(nameof(request));
 
         if (!SendrActivitySource.IsEnabled)
-            return ((RequestHandler)
-                registry.GetOrCreate(request.GetType()))
-            .HandleAsync(request, sp, cancellationToken);
+        {
+            try
+            {
+                return ((RequestHandler)registry.GetOrCreate(request.GetType()))
+                    .HandleAsync(request, sp, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return FaultedTask.From(ex);
+            }
+        }
 
         return SendrActivitySource.Invoke("request", request.GetType(),
             (registry, sp, request, cancellationToken),
@@ -25,9 +33,17 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
             throw new ArgumentNullException(nameof(request));
 
         if (!SendrActivitySource.IsEnabled)
-            return ((RequestHandler<TResponse>)
-                registry.GetOrCreate(request.GetType(), typeof(TResponse)))
-            .HandleAsync(request, sp, cancellationToken);
+        {
+            try
+            {
+                return ((RequestHandler<TResponse>)registry.GetOrCreate(request.GetType(), typeof(TResponse)))
+                    .HandleAsync(request, sp, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return FaultedTask.From<TResponse>(ex);
+            }
+        }
 
         return SendrActivitySource.Invoke("request", request.GetType(),
             (registry, sp, request, cancellationToken),
@@ -68,9 +84,17 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
             throw new ArgumentNullException(nameof(command));
 
         if (!SendrActivitySource.IsEnabled)
-            return ((CommandHandler)
-                registry.GetOrCreateCommand(command.GetType()))
-            .HandleAsync(command, sp, cancellationToken);
+        {
+            try
+            {
+                return ((CommandHandler)registry.GetOrCreateCommand(command.GetType()))
+                    .HandleAsync(command, sp, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return FaultedTask.From(ex);
+            }
+        }
 
         return SendrActivitySource.Invoke("command", command.GetType(),
             (registry, sp, command, cancellationToken),
@@ -85,9 +109,17 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
             throw new ArgumentNullException(nameof(command));
 
         if (!SendrActivitySource.IsEnabled)
-            return ((CommandHandler<TResponse>)
-                registry.GetOrCreateCommand(command.GetType(), typeof(TResponse)))
-            .HandleAsync(command, sp, cancellationToken);
+        {
+            try
+            {
+                return ((CommandHandler<TResponse>)registry.GetOrCreateCommand(command.GetType(), typeof(TResponse)))
+                    .HandleAsync(command, sp, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return FaultedTask.From<TResponse>(ex);
+            }
+        }
 
         return SendrActivitySource.Invoke("command", command.GetType(),
             (registry, sp, command, cancellationToken),
@@ -102,9 +134,17 @@ internal sealed class Sender(IServiceProvider sp, HandlerRegistry registry) : IS
             throw new ArgumentNullException(nameof(query));
 
         if (!SendrActivitySource.IsEnabled)
-            return ((QueryHandler<TResponse>)
-                registry.GetOrCreateQuery(query.GetType(), typeof(TResponse)))
-            .HandleAsync(query, sp, cancellationToken);
+        {
+            try
+            {
+                return ((QueryHandler<TResponse>)registry.GetOrCreateQuery(query.GetType(), typeof(TResponse)))
+                    .HandleAsync(query, sp, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return FaultedTask.From<TResponse>(ex);
+            }
+        }
 
         return SendrActivitySource.Invoke("query", query.GetType(),
             (registry, sp, query, cancellationToken),

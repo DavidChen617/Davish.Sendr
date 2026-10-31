@@ -41,16 +41,6 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     private const string RunAsMethodName = "RunAs";
     private const string UseGeneratorsMethodName = "UseGenerators";
 
-    // IPublisher's presence (rather than INotificationHandler`1's) is the actual signal that
-    // emitting GeneratedPublisher/NotificationOptionsGeneratedExtensions is safe: the generated
-    // UseGenerators() overload for NotificationOptions references NotificationOptions itself,
-    // which — like SendrOptions for the request/command/query side — lives only in the Sendr
-    // implementation assembly, not Sendr.Abstractions. A consumer could in principle implement
-    // INotificationHandler<T> (from Abstractions) without referencing Sendr proper at all; gating
-    // on IPublisher instead of the handler interface avoids emitting a NotificationOptions
-    // reference into a compilation where that type doesn't exist.
-    private const string PublisherMetadataName = "Davish.Sendr.IPublisher";
-
     private enum ConfigKind
     {
         Sender,
@@ -81,22 +71,34 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             .Select(static (c, _) => c!)
             .Collect();
 
-        var hasNotificationSupport = context.CompilationProvider
-            .Select(static (compilation, _) => compilation.GetTypeByMetadataName(PublisherMetadataName) is not null);
+        // The generated code uses SendrOptions, NotificationOptions, SendrActivitySource and others that
+        // live only in Davish.Sendr, not Davish.Sendr.Abstractions (where the handler interfaces and
+        // IPublisher are), so Davish.Sendr itself has to be referenced for anything to be emitted.
+        var hasSendr = context.CompilationProvider
+            .Select(static (compilation, _) => compilation.GetTypeByMetadataName(SendrOptionsMetadataName) is not null);
 
         var combined = localResults
             .Combine(configCandidates)
-            .Combine(hasNotificationSupport)
+            .Combine(hasSendr)
             .Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(combined, static (spc, data) =>
         {
-            var (((local, configs), hasNotification), compilation) = data;
-            Emit(spc, local, configs, hasNotification, compilation);
+            var (((local, configs), sendrReferenced), compilation) = data;
+            if (!sendrReferenced)
+            {
+                // Nothing will be generated, so no handler is used; only say why.
+                spc.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.SendrNotReferenced, Location.None));
+                return;
+            }
+
+            Emit(spc, local, configs, compilation);
         });
     }
 
-    private readonly record struct AnalysisResult(HandlerModel? Model, ImmutableArray<Diagnostic> Diagnostics);
+    // Kind is kept even without a Model (an inaccessible, value-type or open generic handler), so an
+    // included assembly's results can be split into the sender and publisher sides before reporting.
+    private readonly record struct AnalysisResult(HandlerKind Kind, HandlerModel? Model, ImmutableArray<Diagnostic> Diagnostics);
 
     // A single `IncludeAssemblyOf<TMarker>()` call found inside a `UseGenerators(g => ...)`
     // configuration lambda. `Location` is the call's own site, used as the diagnostic/dispatch
@@ -118,6 +120,15 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         var classDecl = (TypeDeclarationSyntax)ctx.Node;
 
         if (ctx.SemanticModel.GetDeclaredSymbol(classDecl, ct) is not INamedTypeSymbol classSymbol)
+            return ImmutableArray<AnalysisResult>.Empty;
+
+        // A partial type reaches here once per declaration that has a base list, and each would
+        // analyze the whole symbol again; analyze it from the first such declaration only.
+        var firstWithBaseList = classSymbol.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(ct))
+            .OfType<TypeDeclarationSyntax>()
+            .First(declaration => declaration.BaseList is { Types.Count: > 0 });
+        if (firstWithBaseList != classDecl)
             return ImmutableArray<AnalysisResult>.Empty;
 
         return AnalyzeClassSymbol(classSymbol, ctx.SemanticModel.Compilation, fallbackLocation: null);
@@ -229,21 +240,21 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         {
             var inaccessible = Diagnostic.Create(
                 NotAccessibleDescriptor(classSymbol, compilation), location, classSymbol.ToDisplayString());
-            return new AnalysisResult(null, [inaccessible]);
+            return new AnalysisResult(kind, null, [inaccessible]);
         }
 
         if (classSymbol.IsValueType)
         {
             var diagnostic = Diagnostic.Create(
                 DiagnosticDescriptors.ValueTypeHandlerNotSupported, location, classSymbol.ToDisplayString());
-            return new AnalysisResult(null, [diagnostic]);
+            return new AnalysisResult(kind, null, [diagnostic]);
         }
 
         if (classSymbol.TypeParameters.Length > 0)
         {
             var diagnostic = Diagnostic.Create(
                 DiagnosticDescriptors.OpenGenericHandlerSkipped, location, classSymbol.ToDisplayString());
-            return new AnalysisResult(null, [diagnostic]);
+            return new AnalysisResult(kind, null, [diagnostic]);
         }
 
         var typeArgs = interfaceSymbol.TypeArguments;
@@ -270,7 +281,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             classSymbol, requiredInterfaceSymbol, requiredDisplayName, compilation, fallbackLocation);
 
         var model = new HandlerModel(kind, requestType, responseType, ToGlobalName(classSymbol), decorators);
-        return new AnalysisResult(model, diagnostics);
+        return new AnalysisResult(kind, model, diagnostics);
     }
 
     /// <summary>
@@ -551,7 +562,6 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         SourceProductionContext spc,
         ImmutableArray<AnalysisResult> localResults,
         ImmutableArray<UseGeneratorsConfigCandidate> configs,
-        bool hasNotificationSupport,
         Compilation compilation)
     {
         foreach (var config in configs)
@@ -596,21 +606,22 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             foreach (var diagnostic in result.Diagnostics)
                 spc.ReportDiagnostic(diagnostic);
 
-        foreach (var results in externalResultsByAssembly.Values)
-            foreach (var result in results)
-                foreach (var diagnostic in result.Diagnostics)
-                    spc.ReportDiagnostic(diagnostic);
-
-        // Notification handlers never came from local syntax discovery's non-Notification results
-        // and vice versa, so this reuses the exact same dedup pipeline the local-only generator
-        // always had — local results first, then each included assembly's — for a deterministic,
-        // stable ordering of which handler "already has" a request type when SENDR002 fires.
-        var allResults = localResults
-            .Concat(senderAssemblies.SelectMany(a => externalResultsByAssembly[a])
-                .Where(r => r.Model is not { Kind: HandlerKind.Notification }))
+        // An included assembly contributes its non-notification handlers to the sender side and its
+        // notification handlers to the publisher side. Only the handlers the generated code will use
+        // get their diagnostics reported; the rest of the assembly is never registered.
+        var externalResults = senderAssemblies.SelectMany(a => externalResultsByAssembly[a])
+            .Where(r => r.Kind != HandlerKind.Notification)
             .Concat(notificationAssemblies.SelectMany(a => externalResultsByAssembly[a])
-                .Where(r => r.Model is { Kind: HandlerKind.Notification }))
+                .Where(r => r.Kind == HandlerKind.Notification))
             .ToImmutableArray();
+
+        foreach (var result in externalResults)
+            foreach (var diagnostic in result.Diagnostics)
+                spc.ReportDiagnostic(diagnostic);
+
+        // Local results first, then each included assembly's, for a deterministic, stable ordering
+        // of which handler "already has" a request type when SENDR002 fires.
+        var allResults = localResults.Concat(externalResults).ToImmutableArray();
 
         // Every other handler kind allows exactly one handler per request type — a second one is
         // ambiguous (SENDR002). Notification handlers are the opposite: any number of classes may
@@ -651,14 +662,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             deduped.Add(model);
         }
 
-        // Without Sendr referenced (IPublisher unresolvable), there is nothing valid to emit for
-        // any discovered notification handler — GeneratedPublisher itself couldn't compile — so
-        // they're dropped rather than passed to SourceBuilder.
-        var models = hasNotificationSupport
-            ? deduped.ToImmutable()
-            : deduped.Where(m => m.Kind != HandlerKind.Notification).ToImmutableArray();
-
-        var source = SourceBuilder.Build(models, hasNotificationSupport);
+        var source = SourceBuilder.Build(deduped.ToImmutable());
         spc.AddSource("Sendr.Generated.g.cs", SourceText.From(source, Encoding.UTF8));
     }
 
