@@ -18,7 +18,7 @@ Sendr is a small mediator library designed to limit allocations. It supports req
 - Return lazy async streams with `IStreamRequest<TResponse>` and `IAsyncEnumerable<T>`.
 - Publish `INotification` to any number of handlers in ordered Sequence and concurrent Parallel groups.
 - Wrap compatible request, stream, or notification handlers with a reusable, non-generic decorator.
-- Register handlers manually or use compile-time discovery. Neither path scans assemblies at runtime.
+- Register handlers manually or use compile-time discovery — one or the other for the sender, and separately for the publisher. Neither path scans assemblies at runtime.
 - Enable reflection-free `ISender`/`IStreamSender` dispatch with `Davish.Sendr.Generators` and `AddSendr(o => o.UseGenerators())`.
 - Emit an `Activity` per request, command, query, and notification dispatch for OpenTelemetry tracing. See [Tracing](#tracing).
 - Target `netstandard2.0` and `net10.0`.
