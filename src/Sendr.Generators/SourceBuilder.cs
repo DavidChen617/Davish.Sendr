@@ -44,7 +44,7 @@ internal static class SourceBuilder
         sb.AppendLine("            \"Make sure the handler is a class or record (not struct/record struct or open generic), \" +");
         sb.AppendLine("            \"is accessible from this project, and is either declared in this project's own \" +");
         sb.AppendLine("            \"compilation or in an assembly named via UseGenerators(g => g.IncludeAssemblyOf<TMarker>()) \" +");
-        sb.AppendLine("            \"— or register it manually instead of relying on UseGenerators().\";");
+        sb.AppendLine("            \"— or stop calling UseGenerators() for the sender and register every handler manually.\";");
         sb.AppendLine();
 
         AppendSendAsync(sb, senderModels.Where(m => m.Kind == HandlerKind.Request).ToImmutableArray());
