@@ -9,7 +9,7 @@ namespace Davish.Sendr.Generators;
 /// </summary>
 internal static class SourceBuilder
 {
-    public static string Build(ImmutableArray<HandlerModel> models, bool hasNotificationSupport)
+    public static string Build(ImmutableArray<HandlerModel> models)
     {
         var senderModels = models.Where(m => m.Kind != HandlerKind.Notification).ToImmutableArray();
         var notificationModels = models.Where(m => m.Kind == HandlerKind.Notification).ToImmutableArray();
@@ -44,7 +44,22 @@ internal static class SourceBuilder
         sb.AppendLine("            \"Make sure the handler is a class or record (not struct/record struct or open generic), \" +");
         sb.AppendLine("            \"is accessible from this project, and is either declared in this project's own \" +");
         sb.AppendLine("            \"compilation or in an assembly named via UseGenerators(g => g.IncludeAssemblyOf<TMarker>()) \" +");
-        sb.AppendLine("            \"— or register it manually instead of relying on UseGenerators().\";");
+        sb.AppendLine("            \"— or stop calling UseGenerators() for the sender and register every handler manually.\";");
+        sb.AppendLine();
+        // A send reports failures through its task, never by throwing from SendAsync itself (only a null
+        // message does). Async, like the traced path, so OperationCanceledException yields a canceled task
+        // and the original instance is rethrown when awaited. ExceptionDispatchInfo.Capture(...).Throw()
+        // rather than the static Throw(Exception), which netstandard2.0 consumers do not have.
+        sb.AppendLine("#pragma warning disable CS1998 // Async method lacks 'await' operators: throwing inside it is the point.");
+        sb.AppendLine("        private static async global::System.Threading.Tasks.Task Fault(global::System.Exception exception) =>");
+        sb.AppendLine("            global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();");
+        sb.AppendLine();
+        sb.AppendLine("        private static async global::System.Threading.Tasks.Task<TResult> Fault<TResult>(global::System.Exception exception)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();");
+        sb.AppendLine("            return default!;");
+        sb.AppendLine("        }");
+        sb.AppendLine("#pragma warning restore CS1998");
         sb.AppendLine();
 
         AppendSendAsync(sb, senderModels.Where(m => m.Kind == HandlerKind.Request).ToImmutableArray());
@@ -61,11 +76,8 @@ internal static class SourceBuilder
 
         sb.AppendLine("    }");
 
-        if (hasNotificationSupport)
-        {
-            sb.AppendLine();
-            AppendGeneratedPublisher(sb, notificationModels);
-        }
+        sb.AppendLine();
+        AppendGeneratedPublisher(sb, notificationModels);
 
         sb.AppendLine("}");
         sb.AppendLine();
@@ -107,11 +119,8 @@ internal static class SourceBuilder
         sb.AppendLine("        }");
         sb.AppendLine("    }");
 
-        if (hasNotificationSupport)
-        {
-            sb.AppendLine();
-            AppendNotificationOptionsGeneratedExtensions(sb, notificationModels);
-        }
+        sb.AppendLine();
+        AppendNotificationOptionsGeneratedExtensions(sb, notificationModels);
 
         sb.AppendLine("}");
 
@@ -185,14 +194,27 @@ internal static class SourceBuilder
         sb.AppendLine("            if (_requestHandlers.TryGetValue(request.GetType(), out var handler))");
         sb.AppendLine("            {");
         sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
-        sb.AppendLine("                    return handler(_sp, request, cancellationToken);");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    try");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return handler(_sp, request, cancellationToken);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    catch (global::System.Exception ex)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return Fault(ex);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
         sb.AppendLine();
         sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"request\", request.GetType(), (handler, _sp, request, cancellationToken), " +
                               "static s => s.handler(s._sp, s.request, s.cancellationToken));");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}>\"));");
+        sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                return Fault(notFound);");
+        sb.AppendLine();
+        sb.AppendLine("            return global::Davish.Sendr.SendrActivitySource.Invoke(\"request\", request.GetType(), notFound, static e => Fault(e));");
         sb.AppendLine("        }");
     }
 
@@ -235,14 +257,27 @@ internal static class SourceBuilder
         sb.AppendLine("            if (_requestResponseHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("            {");
         sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
-        sb.AppendLine("                    return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    try");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, request, cancellationToken);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    catch (global::System.Exception ex)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return Fault<TResponse>(ex);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
         sb.AppendLine();
         sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"request\", request.GetType(), (handler, _sp, request, cancellationToken), " +
                               "static s => (global::System.Threading.Tasks.Task<TResponse>)s.handler(s._sp, s.request, s.cancellationToken));");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                return Fault<TResponse>(notFound);");
+        sb.AppendLine();
+        sb.AppendLine("            return global::Davish.Sendr.SendrActivitySource.Invoke(\"request\", request.GetType(), notFound, static e => Fault<TResponse>(e));");
         sb.AppendLine("        }");
     }
 
@@ -334,14 +369,27 @@ internal static class SourceBuilder
         sb.AppendLine("            if (_commandHandlers.TryGetValue(command.GetType(), out var handler))");
         sb.AppendLine("            {");
         sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
-        sb.AppendLine("                    return handler(_sp, command, cancellationToken);");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    try");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return handler(_sp, command, cancellationToken);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    catch (global::System.Exception ex)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return Fault(ex);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
         sb.AppendLine();
         sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"command\", command.GetType(), (handler, _sp, command, cancellationToken), " +
                               "static s => s.handler(s._sp, s.command, s.cancellationToken));");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}>\"));");
+        sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                return Fault(notFound);");
+        sb.AppendLine();
+        sb.AppendLine("            return global::Davish.Sendr.SendrActivitySource.Invoke(\"command\", command.GetType(), notFound, static e => Fault(e));");
         sb.AppendLine("        }");
     }
 
@@ -380,14 +428,27 @@ internal static class SourceBuilder
         sb.AppendLine("            if (_commandResponseHandlers.TryGetValue((command.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("            {");
         sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
-        sb.AppendLine("                    return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    try");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, command, cancellationToken);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    catch (global::System.Exception ex)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return Fault<TResponse>(ex);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
         sb.AppendLine();
         sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"command\", command.GetType(), (handler, _sp, command, cancellationToken), " +
                               "static s => (global::System.Threading.Tasks.Task<TResponse>)s.handler(s._sp, s.command, s.cancellationToken));");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                return Fault<TResponse>(notFound);");
+        sb.AppendLine();
+        sb.AppendLine("            return global::Davish.Sendr.SendrActivitySource.Invoke(\"command\", command.GetType(), notFound, static e => Fault<TResponse>(e));");
         sb.AppendLine("        }");
     }
 
@@ -426,14 +487,27 @@ internal static class SourceBuilder
         sb.AppendLine("            if (_queryHandlers.TryGetValue((query.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("            {");
         sb.AppendLine("                if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
-        sb.AppendLine("                    return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    try");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return (global::System.Threading.Tasks.Task<TResponse>)handler(_sp, query, cancellationToken);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    catch (global::System.Exception ex)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return Fault<TResponse>(ex);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
         sb.AppendLine();
         sb.AppendLine("                return global::Davish.Sendr.SendrActivitySource.Invoke(\"query\", query.GetType(), (handler, _sp, query, cancellationToken), " +
                               "static s => (global::System.Threading.Tasks.Task<TResponse>)s.handler(s._sp, s.query, s.cancellationToken));");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
         sb.AppendLine("                NotDiscovered($\"IQueryHandler<{query.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
+        sb.AppendLine("                return Fault<TResponse>(notFound);");
+        sb.AppendLine();
+        sb.AppendLine("            return global::Davish.Sendr.SendrActivitySource.Invoke(\"query\", query.GetType(), notFound, static e => Fault<TResponse>(e));");
         sb.AppendLine("        }");
     }
 

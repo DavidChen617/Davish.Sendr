@@ -79,7 +79,7 @@ public static class NotificationDependency
                 services.TryAddTransient(handlerType);
 
             foreach (var decoratorType in options.DecoratorTypes)
-                services.TryAddTransient(decoratorType);
+                Dependency.TryAddDecorator(services, decoratorType);
 
             // Snapshotted into arrays rather than passed as-is: NotificationHandlers<TNotification>
             // stores whatever IReadOnlyList it's given directly, and options.SequenceSteps/
@@ -169,8 +169,9 @@ public sealed class NotificationHandlerBuilder<TNotification>
     internal NotificationHandlerBuilder(NotificationHandlerOptions<TNotification> options) => _options = options;
 
     /// <summary>
-    /// Fluent entry point for declaring handlers that run one after another, in the order added,
-    /// stopping if one of them throws.
+    /// Fluent entry point for declaring handlers that run one after another, in the order added.
+    /// A failing handler does not stop the ones after it; failures are reported once every
+    /// handler has run.
     /// </summary>
     public SequenceHandlerBuilder<TNotification> Sequence => new(_options);
 
@@ -179,9 +180,11 @@ public sealed class NotificationHandlerBuilder<TNotification>
     /// the Sequence group.
     /// </summary>
     /// <remarks>
-    /// Placeholder: today this runs every entry via <c>Task.WhenAll</c> with no further policy
-    /// (exception aggregation, per-handler scoping for concurrent access to scoped services such
-    /// as a <c>DbContext</c>, cancellation-on-failure). Those are expected to be refined later.
+    /// Every entry is started before any is awaited, and a failing handler does not stop or
+    /// cancel the others. Once every handler has finished, a single failure is rethrown as is
+    /// and several are thrown together as an <see cref="AggregateException"/>. Handlers share the
+    /// scope <c>PublishAsync</c> was resolved from; no per-handler scope is created, so scoped
+    /// services such as a <c>DbContext</c> are not safe to use concurrently from these handlers.
     /// </remarks>
     public ParallelHandlerBuilder<TNotification> Parallel => new(_options);
 }

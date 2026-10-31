@@ -7,6 +7,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.svg)](https://www.nuget.org/packages/Davish.Sendr/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+[Documentation](https://davidchen617.github.io/Davish.Sendr/) · [繁體中文](https://davidchen617.github.io/Davish.Sendr/zh-tw/)
+
 </div>
 
 Sendr is a small mediator library designed to limit allocations. It supports request/response dispatch, async streams, and notification publishing, with decorators for each. Register handlers explicitly or opt into compile-time discovery.
@@ -18,7 +20,7 @@ Sendr is a small mediator library designed to limit allocations. It supports req
 - Return lazy async streams with `IStreamRequest<TResponse>` and `IAsyncEnumerable<T>`.
 - Publish `INotification` to any number of handlers in ordered Sequence and concurrent Parallel groups.
 - Wrap compatible request, stream, or notification handlers with a reusable, non-generic decorator.
-- Register handlers manually or use compile-time discovery. Neither path scans assemblies at runtime.
+- Register handlers manually or use compile-time discovery — one or the other for the sender, and separately for the publisher. Neither path scans assemblies at runtime.
 - Enable reflection-free `ISender`/`IStreamSender` dispatch with `Davish.Sendr.Generators` and `AddSendr(o => o.UseGenerators())`.
 - Emit an `Activity` per request, command, query, and notification dispatch for OpenTelemetry tracing. See [Tracing](#tracing).
 - Target `netstandard2.0` and `net10.0`.
@@ -233,6 +235,7 @@ Notes:
 - Once `UseGenerators()` installs the generated sender, dispatch only knows about handlers discovered at compile time. Manual `AddRequestHandler`/`AddCommandHandler`/`AddQueryHandler`/`AddStreamRequestHandler` calls do not extend its dispatch tables. Choose manual registration or generated registration for the sender. Use `SendrOptions.UseSender<TSender>()` to install a custom sender implementation.
 - `[DecorateWith<...>]` comes in arities 1 through 8; apply at most one per handler class.
 - The generator discovers both classes and record classes.
+- The generator needs `Davish.Sendr` in the same project. In a project that references only `Davish.Sendr.Abstractions` (for example a handler library), it generates nothing and reports warning `SENDR008`; remove the generator there and include the library from the host with `IncludeAssemblyOf<TMarker>()`.
 - A handler declared as `struct`/`record struct` is a compile error (`SENDR004`), since handler resolution (generated or manual) requires a reference type; use `class`/`record class` instead.
 - Open generic handler classes are not discovered. Register closed constructed handler types with the appropriate manual registration method, without `UseGenerators()`.
 - By default, the generator discovers handlers only in the project that calls `UseGenerators()`. Handlers in a referenced project or NuGet package require an explicit `IncludeAssemblyOf<TMarker>()` declaration (see [Cross-assembly discovery](#cross-assembly-discovery)). Alternatively, use manual registration without `UseGenerators()`.

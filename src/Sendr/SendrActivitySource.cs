@@ -68,8 +68,9 @@ public static class SendrActivitySource
 
     // Async on purpose: Activity.Current is an AsyncLocal, and an async method's changes to it are
     // reverted when control returns to the caller, so the started Activity can't leak into the
-    // caller's context. Side effect: while a listener is attached, an exception thrown
-    // synchronously by `call` surfaces as a faulted Task instead.
+    // caller's context. An exception thrown synchronously by `call` therefore surfaces as a faulted
+    // Task; the senders' untraced paths turn such exceptions into the same faulted Task, so attaching
+    // a listener does not change how a failure reaches the caller.
     private static async Task InvokeTraced<TState>(
         string kind, Type requestType, string? group, TState state, Func<TState, Task> call)
     {
