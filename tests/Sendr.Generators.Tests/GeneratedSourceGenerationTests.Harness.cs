@@ -478,6 +478,96 @@ public partial class GeneratedSourceGenerationTests
             .Run();
     }
 
+    private const string ProblemHandlersLibrary = """
+        using Davish.Sendr;
+
+        namespace Lib;
+
+        public sealed class Marker;
+        public sealed class NotADecorator;
+
+        public sealed record HiddenNote : INotification;
+
+        internal sealed class HiddenNoteHandler : INotificationHandler<HiddenNote>
+        {
+            public Task HandleAsync(HiddenNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
+        public sealed record DecoratedNote : INotification;
+
+        [DecorateWith<NotADecorator>]
+        public sealed class BadlyDecoratedNoteHandler : INotificationHandler<DecoratedNote>
+        {
+            public Task HandleAsync(DecoratedNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
+        public sealed record HiddenQuery : IQuery<int>;
+
+        internal sealed class HiddenQueryHandler : IQueryHandler<HiddenQuery, int>
+        {
+            public Task<int> HandleAsync(HiddenQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+        }
+
+        public sealed record DecoratedQuery : IQuery<int>;
+
+        [DecorateWith<NotADecorator>]
+        public sealed class BadlyDecoratedQueryHandler : IQueryHandler<DecoratedQuery, int>
+        {
+            public Task<int> HandleAsync(DecoratedQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+        }
+
+        public sealed record StructQuery : IQuery<int>;
+
+        public struct StructQueryHandler : IQueryHandler<StructQuery, int>
+        {
+            public Task<int> HandleAsync(StructQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+        }
+        """;
+
+    private static readonly string[] ProblemNotificationHandlers = ["HiddenNoteHandler", "BadlyDecoratedNoteHandler"];
+    private static readonly string[] ProblemQueryHandlers = ["HiddenQueryHandler", "BadlyDecoratedQueryHandler", "StructQueryHandler"];
+
+    /// <summary>Which of the library's problem handlers the run's SENDR001/004/007 diagnostics name, one entry per diagnostic.</summary>
+    private static string[] ProblemHandlersReported(GeneratorRun run) =>
+    [
+        .. run.Diagnostics
+            .Where(d => d.Id is "SENDR001" or "SENDR004" or "SENDR007")
+            .Select(d => ProblemNotificationHandlers.Concat(ProblemQueryHandlers).Single(name => d.GetMessage().Contains($"Lib.{name}'")))
+            .Order(),
+    ];
+
+    public static TheoryData<string> OneSide => new() { "sender", "publisher" };
+
+    [Theory]
+    [MemberData(nameof(OneSide))]
+    public void GivenProblemHandlersInAssemblyIncludedOnOneSide_WhenGeneratorRuns_ThenOnlyThatSidesDiagnosticsAreReported(string side)
+    {
+        var body = side == "sender"
+            ? "services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>())); services.AddSendrNotification(o => o.UseGenerators());"
+            : "services.AddSendr(o => o.UseGenerators()); services.AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>()));";
+        var expected = side == "sender" ? ProblemQueryHandlers : ProblemNotificationHandlers;
+
+        new Scenario()
+            .Given("An included library with problem notification handlers and problem query handlers", () => Library(ProblemHandlersLibrary))
+            .When($"Only the {side} side includes it and the generator runs", library => RunHost(body, "", library))
+            .Then($"Only the {side} side's handlers are reported, once each", run =>
+                Assert.Equal(expected.Order(), ProblemHandlersReported(run)))
+            .Run();
+    }
+
+    [Fact]
+    public void GivenProblemHandlersInAssemblyIncludedOnBothSides_WhenGeneratorRuns_ThenEveryDiagnosticIsReported()
+    {
+        new Scenario()
+            .Given("An included library with problem notification handlers and problem query handlers", () => Library(ProblemHandlersLibrary))
+            .When("Both sides include it and the generator runs", library => RunHost(
+                "services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>())); " +
+                "services.AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>()));", "", library))
+            .Then("Every problem handler is reported, once each", run =>
+                Assert.Equal(ProblemNotificationHandlers.Concat(ProblemQueryHandlers).Order(), ProblemHandlersReported(run)))
+            .Run();
+    }
+
     // ---- UseGenerators configuration syntax ----
 
     private static readonly IReadOnlyDictionary<string, (string Body, string Declarations)> UnsupportedConfigurations = new Dictionary<string, (string, string)>
