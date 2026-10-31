@@ -96,7 +96,9 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         });
     }
 
-    private readonly record struct AnalysisResult(HandlerModel? Model, ImmutableArray<Diagnostic> Diagnostics);
+    // Kind is kept even without a Model (an inaccessible, value-type or open generic handler), so an
+    // included assembly's results can be split into the sender and publisher sides before reporting.
+    private readonly record struct AnalysisResult(HandlerKind Kind, HandlerModel? Model, ImmutableArray<Diagnostic> Diagnostics);
 
     // A single `IncludeAssemblyOf<TMarker>()` call found inside a `UseGenerators(g => ...)`
     // configuration lambda. `Location` is the call's own site, used as the diagnostic/dispatch
@@ -224,21 +226,21 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         {
             var inaccessible = Diagnostic.Create(
                 DiagnosticDescriptors.ExternalHandlerNotAccessible, location, classSymbol.ToDisplayString());
-            return new AnalysisResult(null, [inaccessible]);
+            return new AnalysisResult(kind, null, [inaccessible]);
         }
 
         if (classSymbol.IsValueType)
         {
             var diagnostic = Diagnostic.Create(
                 DiagnosticDescriptors.ValueTypeHandlerNotSupported, location, classSymbol.ToDisplayString());
-            return new AnalysisResult(null, [diagnostic]);
+            return new AnalysisResult(kind, null, [diagnostic]);
         }
 
         if (classSymbol.TypeParameters.Length > 0)
         {
             var diagnostic = Diagnostic.Create(
                 DiagnosticDescriptors.OpenGenericHandlerSkipped, location, classSymbol.ToDisplayString());
-            return new AnalysisResult(null, [diagnostic]);
+            return new AnalysisResult(kind, null, [diagnostic]);
         }
 
         var typeArgs = interfaceSymbol.TypeArguments;
@@ -265,7 +267,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             classSymbol, requiredInterfaceSymbol, requiredDisplayName, compilation, fallbackLocation);
 
         var model = new HandlerModel(kind, requestType, responseType, ToGlobalName(classSymbol), decorators);
-        return new AnalysisResult(model, diagnostics);
+        return new AnalysisResult(kind, model, diagnostics);
     }
 
     /// <summary>
@@ -591,21 +593,22 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             foreach (var diagnostic in result.Diagnostics)
                 spc.ReportDiagnostic(diagnostic);
 
-        foreach (var results in externalResultsByAssembly.Values)
-            foreach (var result in results)
-                foreach (var diagnostic in result.Diagnostics)
-                    spc.ReportDiagnostic(diagnostic);
-
-        // Notification handlers never came from local syntax discovery's non-Notification results
-        // and vice versa, so this reuses the exact same dedup pipeline the local-only generator
-        // always had — local results first, then each included assembly's — for a deterministic,
-        // stable ordering of which handler "already has" a request type when SENDR002 fires.
-        var allResults = localResults
-            .Concat(senderAssemblies.SelectMany(a => externalResultsByAssembly[a])
-                .Where(r => r.Model is not { Kind: HandlerKind.Notification }))
+        // An included assembly contributes its non-notification handlers to the sender side and its
+        // notification handlers to the publisher side. Only the handlers the generated code will use
+        // get their diagnostics reported; the rest of the assembly is never registered.
+        var externalResults = senderAssemblies.SelectMany(a => externalResultsByAssembly[a])
+            .Where(r => r.Kind != HandlerKind.Notification)
             .Concat(notificationAssemblies.SelectMany(a => externalResultsByAssembly[a])
-                .Where(r => r.Model is { Kind: HandlerKind.Notification }))
+                .Where(r => r.Kind == HandlerKind.Notification))
             .ToImmutableArray();
+
+        foreach (var result in externalResults)
+            foreach (var diagnostic in result.Diagnostics)
+                spc.ReportDiagnostic(diagnostic);
+
+        // Local results first, then each included assembly's, for a deterministic, stable ordering
+        // of which handler "already has" a request type when SENDR002 fires.
+        var allResults = localResults.Concat(externalResults).ToImmutableArray();
 
         // Every other handler kind allows exactly one handler per request type — a second one is
         // ambiguous (SENDR002). Notification handlers are the opposite: any number of classes may
