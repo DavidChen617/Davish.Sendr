@@ -122,6 +122,15 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         if (ctx.SemanticModel.GetDeclaredSymbol(classDecl, ct) is not INamedTypeSymbol classSymbol)
             return ImmutableArray<AnalysisResult>.Empty;
 
+        // A partial type reaches here once per declaration that has a base list, and each would
+        // analyze the whole symbol again; analyze it from the first such declaration only.
+        var firstWithBaseList = classSymbol.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(ct))
+            .OfType<TypeDeclarationSyntax>()
+            .First(declaration => declaration.BaseList is { Types.Count: > 0 });
+        if (firstWithBaseList != classDecl)
+            return ImmutableArray<AnalysisResult>.Empty;
+
         return AnalyzeClassSymbol(classSymbol, ctx.SemanticModel.Compilation, fallbackLocation: null);
     }
 

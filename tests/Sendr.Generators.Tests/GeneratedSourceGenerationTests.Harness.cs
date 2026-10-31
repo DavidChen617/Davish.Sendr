@@ -270,6 +270,49 @@ public partial class GeneratedSourceGenerationTests
             .Run();
     }
 
+    private static readonly IReadOnlyDictionary<string, string> PartialInvalidDecoratorShapes = new Dictionary<string, string>
+    {
+        ["a query handler"] = """
+            public sealed class NotADecorator;
+            public sealed record SplitQuery : IQuery<int>;
+            [DecorateWith<NotADecorator>]
+            public sealed partial class SplitQueryHandler : IQueryHandler<SplitQuery, int>
+            {
+                public Task<int> HandleAsync(SplitQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed partial class SplitQueryHandler : IDisposable
+            {
+                public void Dispose() { }
+            }
+            """,
+        ["a notification handler"] = """
+            public sealed class NotADecorator;
+            public sealed record SplitNote : INotification;
+            [DecorateWith<NotADecorator>]
+            public sealed partial class SplitNoteHandler : INotificationHandler<SplitNote>
+            {
+                public Task HandleAsync(SplitNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed partial class SplitNoteHandler : IDisposable
+            {
+                public void Dispose() { }
+            }
+            """,
+    };
+
+    public static TheoryData<string> PartialInvalidDecoratorShapeNames => new(PartialInvalidDecoratorShapes.Keys);
+
+    [Theory]
+    [MemberData(nameof(PartialInvalidDecoratorShapeNames))]
+    public void GivenPartialHandlerWithInvalidDecoratorAndSeveralBaseLists_WhenGeneratorRuns_ThenSendr001IsReportedOnce(string shape)
+    {
+        new Scenario()
+            .Given($"{shape} split over two declarations with base lists, whose [DecorateWith] names a type that is not a decorator", () => PartialInvalidDecoratorShapes[shape])
+            .When("The generator runs", d => RunHost("services.AddSendr(o => o.UseGenerators()); services.AddSendrNotification(o => o.UseGenerators());", d))
+            .Then("SENDR001 is reported once", run => Assert.Single(run.Sendr("SENDR001")))
+            .Run();
+    }
+
     // ---- [DecorateWith] checks ----
 
     private const string PlainDecorators = """
