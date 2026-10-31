@@ -269,6 +269,7 @@ Notes:
 - The current project is always included automatically; naming its own assembly again via a local marker is harmless, not an error.
 - Discovery includes only the named assemblies, not their transitive dependencies.
 - A handler discovered this way must be accessible from the calling project: public (including every containing type, for a nested handler), or internal with a matching `[assembly: InternalsVisibleTo("...")]` declared by the library. Otherwise it's a compile error (`SENDR007`) rather than an invisible handler.
+- Handlers and decorators declared in the calling project must be reachable by the generated code as well: a `private` or `protected` nested type is a compile error (`SENDR007`); make it `internal` or `public`, including any containing type.
 - Each compilation has one set of generated dispatch tables for `ISender`/`IStreamSender` and a separate set for `IPublisher`. Each uses the assemblies declared in its own `UseGenerators()` configuration. You can include the same library on both sides. Multiple calls configuring the same sender or publisher must declare identical assembly sets; conflicting sets produce compile error `SENDR006`.
 - Duplicate handlers for a request/response pair produce `SENDR002` whether they are local, in an included assembly, or spread across assemblies.
 

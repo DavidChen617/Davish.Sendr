@@ -217,6 +217,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         symbol.Locations.FirstOrDefault(l => l.IsInSource && compilation.ContainsSyntaxTree(l.SourceTree)) ??
         fallbackLocation ?? Location.None;
 
+    /// <summary>SENDR007's wording for <paramref name="type"/>: declared in this project, or in an included assembly.</summary>
+    private static DiagnosticDescriptor NotAccessibleDescriptor(INamedTypeSymbol type, Compilation compilation) =>
+        SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, compilation.Assembly)
+            ? DiagnosticDescriptors.LocalHandlerNotAccessible
+            : DiagnosticDescriptors.ExternalHandlerNotAccessible;
+
     private static AnalysisResult BuildModel(
         INamedTypeSymbol classSymbol,
         INamedTypeSymbol interfaceSymbol,
@@ -228,13 +234,12 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
 
         // Roslyn accessibility, not "is this the current compilation": a handler declared in an
         // externally included assembly is fine as long as it's public (or internal with a legal
-        // InternalsVisibleTo granted to this compilation) — the same rule a local handler already
-        // satisfies trivially, since anything in the current compilation's own assembly is always
-        // accessible to code generated into that same assembly.
+        // InternalsVisibleTo granted to this compilation). A local handler is usually reachable too,
+        // but not when it is a private or protected nested type.
         if (!compilation.IsSymbolAccessibleWithin(classSymbol, compilation.Assembly))
         {
             var inaccessible = Diagnostic.Create(
-                DiagnosticDescriptors.ExternalHandlerNotAccessible, location, classSymbol.ToDisplayString());
+                NotAccessibleDescriptor(classSymbol, compilation), location, classSymbol.ToDisplayString());
             return new AnalysisResult(kind, null, [inaccessible]);
         }
 
@@ -348,7 +353,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             if (!compilation.IsSymbolAccessibleWithin(decoratorType, compilation.Assembly))
             {
                 diagnostics.Add(Diagnostic.Create(
-                    DiagnosticDescriptors.ExternalHandlerNotAccessible, location2, decoratorType.ToDisplayString()));
+                    NotAccessibleDescriptor(decoratorType, compilation), location2, decoratorType.ToDisplayString()));
                 continue;
             }
 
