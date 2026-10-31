@@ -9,7 +9,7 @@ namespace Davish.Sendr.Generators;
 /// </summary>
 internal static class SourceBuilder
 {
-    public static string Build(ImmutableArray<HandlerModel> models, bool hasNotificationSupport)
+    public static string Build(ImmutableArray<HandlerModel> models)
     {
         var senderModels = models.Where(m => m.Kind != HandlerKind.Notification).ToImmutableArray();
         var notificationModels = models.Where(m => m.Kind == HandlerKind.Notification).ToImmutableArray();
@@ -61,11 +61,8 @@ internal static class SourceBuilder
 
         sb.AppendLine("    }");
 
-        if (hasNotificationSupport)
-        {
-            sb.AppendLine();
-            AppendGeneratedPublisher(sb, notificationModels);
-        }
+        sb.AppendLine();
+        AppendGeneratedPublisher(sb, notificationModels);
 
         sb.AppendLine("}");
         sb.AppendLine();
@@ -107,11 +104,8 @@ internal static class SourceBuilder
         sb.AppendLine("        }");
         sb.AppendLine("    }");
 
-        if (hasNotificationSupport)
-        {
-            sb.AppendLine();
-            AppendNotificationOptionsGeneratedExtensions(sb, notificationModels);
-        }
+        sb.AppendLine();
+        AppendNotificationOptionsGeneratedExtensions(sb, notificationModels);
 
         sb.AppendLine("}");
 

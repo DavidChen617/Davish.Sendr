@@ -67,4 +67,14 @@ internal static class DiagnosticDescriptors
         category: "Davish.Sendr.Generators",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor SendrNotReferenced = new(
+        id: "SENDR008",
+        title: "Davish.Sendr is not referenced",
+        messageFormat: "Davish.Sendr.Generators is referenced but Davish.Sendr is not, so nothing is generated. " +
+                        "Reference Davish.Sendr, or remove the generator from this project and discover its handlers " +
+                        "from the host with UseGenerators(g => g.IncludeAssemblyOf<TMarker>()).",
+        category: "Davish.Sendr.Generators",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
 }

@@ -674,6 +674,59 @@ public partial class GeneratedSourceGenerationTests
             .Run();
     }
 
+    // ---- Davish.Sendr not referenced ----
+
+    private static readonly IReadOnlyDictionary<string, string> AbstractionsOnlyProjects = new Dictionary<string, string>
+    {
+        ["no handlers"] = "namespace Lib; public sealed class Nothing;",
+        ["a handler"] = """
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed record LibQuery : IQuery<int>;
+            public sealed class LibQueryHandler : IQueryHandler<LibQuery, int>
+            {
+                public Task<int> HandleAsync(LibQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed record LibNote : INotification;
+            public sealed class LibNoteHandler : INotificationHandler<LibNote>
+            {
+                public Task HandleAsync(LibNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """,
+        ["a struct handler"] = """
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed record StructQuery : IQuery<int>;
+            public struct StructQueryHandler : IQueryHandler<StructQuery, int>
+            {
+                public Task<int> HandleAsync(StructQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """,
+    };
+
+    public static TheoryData<string> AbstractionsOnlyProjectNames => new(AbstractionsOnlyProjects.Keys);
+
+    [Theory]
+    [MemberData(nameof(AbstractionsOnlyProjectNames))]
+    public void GivenProjectReferencingAbstractionsButNotSendr_WhenGeneratorRuns_ThenNothingIsGeneratedAndSendr008IsReported(string contents)
+    {
+        new Scenario()
+            .Given($"A project that references Davish.Sendr.Abstractions and the generator but not Davish.Sendr, with {contents}", () =>
+                GeneratorHarness.CompileWithoutSendr("Lib", AbstractionsOnlyProjects[contents]))
+            .When("The generator runs", GeneratorHarness.Run)
+            .Then("Nothing is generated, SENDR008 is the only generator diagnostic, and the project compiles", run =>
+            {
+                Assert.Equal("", run.GeneratedSource);
+                var diagnostic = Assert.Single(run.Diagnostics);
+                Assert.Equal("SENDR008", diagnostic.Id);
+                Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+                Assert.Contains("Davish.Sendr is not", diagnostic.GetMessage());
+                Assert.Contains("IncludeAssemblyOf", diagnostic.GetMessage());
+                Assert.Empty(run.CompileErrors);
+            })
+            .Run();
+    }
+
     // ---- Generated code compiles cleanly ----
 
     private const string EveryKindHost = """
