@@ -41,16 +41,6 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
     private const string RunAsMethodName = "RunAs";
     private const string UseGeneratorsMethodName = "UseGenerators";
 
-    // IPublisher's presence (rather than INotificationHandler`1's) is the actual signal that
-    // emitting GeneratedPublisher/NotificationOptionsGeneratedExtensions is safe: the generated
-    // UseGenerators() overload for NotificationOptions references NotificationOptions itself,
-    // which — like SendrOptions for the request/command/query side — lives only in the Sendr
-    // implementation assembly, not Sendr.Abstractions. A consumer could in principle implement
-    // INotificationHandler<T> (from Abstractions) without referencing Sendr proper at all; gating
-    // on IPublisher instead of the handler interface avoids emitting a NotificationOptions
-    // reference into a compilation where that type doesn't exist.
-    private const string PublisherMetadataName = "Davish.Sendr.IPublisher";
-
     private enum ConfigKind
     {
         Sender,
@@ -81,18 +71,28 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             .Select(static (c, _) => c!)
             .Collect();
 
-        var hasNotificationSupport = context.CompilationProvider
-            .Select(static (compilation, _) => compilation.GetTypeByMetadataName(PublisherMetadataName) is not null);
+        // The generated code uses SendrOptions, NotificationOptions, SendrActivitySource and others that
+        // live only in Davish.Sendr, not Davish.Sendr.Abstractions (where the handler interfaces and
+        // IPublisher are), so Davish.Sendr itself has to be referenced for anything to be emitted.
+        var hasSendr = context.CompilationProvider
+            .Select(static (compilation, _) => compilation.GetTypeByMetadataName(SendrOptionsMetadataName) is not null);
 
         var combined = localResults
             .Combine(configCandidates)
-            .Combine(hasNotificationSupport)
+            .Combine(hasSendr)
             .Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(combined, static (spc, data) =>
         {
-            var (((local, configs), hasNotification), compilation) = data;
-            Emit(spc, local, configs, hasNotification, compilation);
+            var (((local, configs), sendrReferenced), compilation) = data;
+            if (!sendrReferenced)
+            {
+                // Nothing will be generated, so no handler is used; only say why.
+                spc.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.SendrNotReferenced, Location.None));
+                return;
+            }
+
+            Emit(spc, local, configs, compilation);
         });
     }
 
@@ -546,7 +546,6 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         SourceProductionContext spc,
         ImmutableArray<AnalysisResult> localResults,
         ImmutableArray<UseGeneratorsConfigCandidate> configs,
-        bool hasNotificationSupport,
         Compilation compilation)
     {
         foreach (var config in configs)
@@ -646,14 +645,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             deduped.Add(model);
         }
 
-        // Without Sendr referenced (IPublisher unresolvable), there is nothing valid to emit for
-        // any discovered notification handler — GeneratedPublisher itself couldn't compile — so
-        // they're dropped rather than passed to SourceBuilder.
-        var models = hasNotificationSupport
-            ? deduped.ToImmutable()
-            : deduped.Where(m => m.Kind != HandlerKind.Notification).ToImmutableArray();
-
-        var source = SourceBuilder.Build(models, hasNotificationSupport);
+        var source = SourceBuilder.Build(deduped.ToImmutable());
         spc.AddSource("Sendr.Generated.g.cs", SourceText.From(source, Encoding.UTF8));
     }
 
