@@ -134,6 +134,33 @@ public partial class GeneratedSourceGenerationTests
             .RunAsync();
     }
 
+    private static readonly IReadOnlyDictionary<string, (Func<IPublisher, Task> Publish, string Handler)> PartialHandlerShapes =
+        new Dictionary<string, (Func<IPublisher, Task>, string)>
+        {
+            ["both declarations list INotificationHandler<T>"] =
+                (publisher => publisher.PublishAsync(new RepeatedBaseNote(), CancellationToken.None), nameof(RepeatedBaseNoteHandler)),
+            ["the second declaration lists an unrelated interface"] =
+                (publisher => publisher.PublishAsync(new UnrelatedBaseNote(), CancellationToken.None), nameof(UnrelatedBaseNoteHandler)),
+        };
+
+    public static TheoryData<string> PartialHandlerShapeNames => new(PartialHandlerShapes.Keys);
+
+    [Theory]
+    [MemberData(nameof(PartialHandlerShapeNames))]
+    public async Task GivenPartialNotificationHandlerWithBaseListOnSeveralDeclarations_WhenPublishAsync_ThenItRunsOnce(string shape)
+    {
+        var probe = new PipelineProbe();
+        var (publish, handler) = PartialHandlerShapes[shape];
+
+        await new Scenario()
+            .Given($"A partial notification handler with two declarations that both have a base list ({shape}), and UseGenerators() on the publisher", () =>
+                GeneratedProvider(services => services.AddSingleton(probe)).CreateScope().ServiceProvider.GetRequiredService<IPublisher>())
+            .When("Its notification is published and awaited", publish)
+            .Then("The handler ran exactly once")
+                .Equal($"{handler} ran once", [handler], _ => probe.Log)
+            .RunAsync();
+    }
+
     // ---- Decorator registration ----
 
     [Fact]
@@ -395,6 +422,35 @@ public sealed record RecNoteHandler(PipelineProbe Probe) : INotificationHandler<
         Probe.Write(nameof(RecNoteHandler));
         return Task.CompletedTask;
     }
+}
+
+public sealed record RepeatedBaseNote : INotification;
+
+public sealed partial class RepeatedBaseNoteHandler(PipelineProbe probe) : INotificationHandler<RepeatedBaseNote>
+{
+    public Task HandleAsync(RepeatedBaseNote notification, CancellationToken cancellationToken)
+    {
+        probe.Write(nameof(RepeatedBaseNoteHandler));
+        return Task.CompletedTask;
+    }
+}
+
+public sealed partial class RepeatedBaseNoteHandler : INotificationHandler<RepeatedBaseNote>;
+
+public sealed record UnrelatedBaseNote : INotification;
+
+public sealed partial class UnrelatedBaseNoteHandler(PipelineProbe probe) : INotificationHandler<UnrelatedBaseNote>
+{
+    public Task HandleAsync(UnrelatedBaseNote notification, CancellationToken cancellationToken)
+    {
+        probe.Write(nameof(UnrelatedBaseNoteHandler));
+        return Task.CompletedTask;
+    }
+}
+
+public sealed partial class UnrelatedBaseNoteHandler : IComparable<UnrelatedBaseNoteHandler>
+{
+    public int CompareTo(UnrelatedBaseNoteHandler? other) => 0;
 }
 
 public sealed record MultiRoleRequest : IRequest;
