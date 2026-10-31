@@ -782,6 +782,73 @@ public partial class GeneratedSourceGenerationTests
                 var diagnostic = Assert.Single(run.Sendr("SENDR007"));
                 Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
                 Assert.Contains(inaccessible, diagnostic.GetMessage());
+                Assert.Contains("included assembly", diagnostic.GetMessage());
+            })
+            .Run();
+    }
+
+    private static readonly IReadOnlyDictionary<string, (string Declarations, string Inaccessible)> LocalInaccessibleShapes = new Dictionary<string, (string, string)>
+    {
+        ["a private nested handler"] = ("""
+            public sealed record HiddenQuery : IQuery<int>;
+            public static class Outer
+            {
+                private sealed class HiddenQueryHandler : IQueryHandler<HiddenQuery, int>
+                {
+                    public Task<int> HandleAsync(HiddenQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+                }
+            }
+            """, "HiddenQueryHandler"),
+        ["a protected nested handler"] = ("""
+            public sealed record ShieldedQuery : IQuery<int>;
+            public class Outer
+            {
+                protected sealed class ShieldedQueryHandler : IQueryHandler<ShieldedQuery, int>
+                {
+                    public Task<int> HandleAsync(ShieldedQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+                }
+            }
+            """, "ShieldedQueryHandler"),
+        ["a public handler with a private nested decorator"] = ("""
+            public static class Outer
+            {
+                private sealed class SecretDecorator : IQueryDecorator
+                {
+                    public Task<TResponse> HandleAsync<TQuery, TResponse>(TQuery query, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+                        where TQuery : IQuery<TResponse> => next();
+                }
+
+                public sealed record OpenQuery : IQuery<int>;
+
+                [DecorateWith<SecretDecorator>]
+                public sealed class OpenQueryHandler : IQueryHandler<OpenQuery, int>
+                {
+                    public Task<int> HandleAsync(OpenQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+                }
+            }
+            """, "SecretDecorator"),
+    };
+
+    public static TheoryData<string> LocalInaccessibleShapeNames => new(LocalInaccessibleShapes.Keys);
+
+    [Theory]
+    [MemberData(nameof(LocalInaccessibleShapeNames))]
+    public void GivenInaccessibleNestedHandlerOrDecoratorInThisCompilation_WhenGeneratorRuns_ThenSendr007SaysItIsDeclaredInThisProject(string shape)
+    {
+        var (declarations, inaccessible) = LocalInaccessibleShapes[shape];
+
+        new Scenario()
+            .Given($"This compilation declares {shape}, which the generated code cannot reach", () => declarations)
+            .When("The generator runs", d => RunHost("services.AddSendr(o => o.UseGenerators());", d))
+            .Then("SENDR007 says the type is declared in this project, without pointing at included assemblies", run =>
+            {
+                var diagnostic = Assert.Single(run.Sendr("SENDR007"));
+                Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+                var message = diagnostic.GetMessage();
+                Assert.Contains(inaccessible, message);
+                Assert.Contains("declared in this project", message);
+                Assert.DoesNotContain("included assembly", message);
+                Assert.DoesNotContain("InternalsVisibleTo", message);
             })
             .Run();
     }
