@@ -79,7 +79,7 @@ public static class NotificationDependency
                 services.TryAddTransient(handlerType);
 
             foreach (var decoratorType in options.DecoratorTypes)
-                services.TryAddTransient(decoratorType);
+                Dependency.TryAddDecorator(services, decoratorType);
 
             // Snapshotted into arrays rather than passed as-is: NotificationHandlers<TNotification>
             // stores whatever IReadOnlyList it's given directly, and options.SequenceSteps/
