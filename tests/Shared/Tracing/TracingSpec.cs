@@ -196,6 +196,45 @@ public abstract class TracingSpec
     }
 
     [Theory]
+    [MemberData(nameof(DispatchCases.AllOverloadsWithSynchronousFailures), MemberType = typeof(DispatchCases))]
+    public async Task GivenListenerAndNoHandlerOrSynchronouslyThrowingHandler_WhenSendAsyncCalled_ThenReturnsFaultedTaskInsteadOfThrowing(string overload, string failure)
+    {
+        using var spans = new SpanCollector(ActivitySamplingResult.AllDataAndRecorded);
+        var dispatch = DispatchCases.All[overload];
+        Func<ISender, Task> call = null!;
+
+        await new Scenario()
+            .Given<TraceContext>($"A listener, and {failure} for the message", ctx =>
+            {
+                call = dispatch.Failing(failure, ctx.Dispatch);
+                ctx.BuildSender(AddSenderUnderTest);
+            })
+            .When($"{overload} is called, and only then is the returned task awaited", ctx => DispatchCases.CallThenAwait(() => call(ctx.Sender)))
+            .Then("Nothing escaped the call itself, and the task carries the failure, as without a listener", outcome =>
+            {
+                Assert.Null(outcome.FromCall);
+                Assert.IsType(failure == DispatchCases.NoHandler ? typeof(InvalidOperationException) : typeof(ProbeFailure), outcome.FromAwait);
+            })
+            .RunAsync();
+    }
+
+    [Theory]
+    [MemberData(nameof(DispatchCases.AllOverloads), MemberType = typeof(DispatchCases))]
+    public async Task GivenListenerAndNoHandler_WhenSendAsyncAwaited_ThenSpanIsStoppedWithErrorStatus(string overload)
+    {
+        using var spans = new SpanCollector(ActivitySamplingResult.AllDataAndRecorded);
+        var dispatch = DispatchCases.All[overload];
+
+        await new Scenario()
+            .Given<TraceContext>($"A listener, and no handler for {dispatch.OrphanType.Name}", ctx => ctx.BuildSender(AddSenderUnderTest))
+            .When($"{overload} is called with it and awaited", ctx => ctx.UnderCaller(() => dispatch.SendOrphan(ctx.Sender, CancellationToken.None)))
+            .ThenThrows<InvalidOperationException>("The missing handler is reported")
+            .And("One span for the message stopped, with Error status and InvalidOperationException as error.type", thrown =>
+                AssertError(Assert.Single(spans.InTraceOf(thrown.State.Caller)), typeof(InvalidOperationException)))
+            .RunAsync();
+    }
+
+    [Theory]
     [MemberData(nameof(DispatchCases.AllOverloads), MemberType = typeof(DispatchCases))]
     public async Task GivenOnlyListenerSamplesNone_WhenSendAsync_ThenNoSpanIsRecordedAndResultIsReturned(string overload)
     {
