@@ -7,6 +7,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Davish.Sendr.svg)](https://www.nuget.org/packages/Davish.Sendr/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+[Documentation](https://davidchen617.github.io/Davish.Sendr/) · [繁體中文](https://davidchen617.github.io/Davish.Sendr/zh-tw/)
+
 </div>
 
 Sendr is a small mediator library designed to limit allocations. It supports request/response dispatch, async streams, and notification publishing, with decorators for each. Register handlers explicitly or opt into compile-time discovery.
