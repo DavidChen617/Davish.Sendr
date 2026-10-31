@@ -202,18 +202,23 @@ public abstract class TracingSpec
         using var spans = new SpanCollector(ActivitySamplingResult.AllDataAndRecorded);
         var dispatch = DispatchCases.All[overload];
         Func<ISender, Task> call = null!;
+        DispatchProbe probe = null!;
 
         await new Scenario()
             .Given<TraceContext>($"A listener, and {failure} for the message", ctx =>
             {
-                call = dispatch.Failing(failure, ctx.Dispatch);
+                probe = ctx.Dispatch;
+                call = dispatch.Failing(failure, probe);
                 ctx.BuildSender(AddSenderUnderTest);
             })
             .When($"{overload} is called, and only then is the returned task awaited", ctx => DispatchCases.CallThenAwait(() => call(ctx.Sender)))
             .Then("Nothing escaped the call itself, and the task carries the failure, as without a listener", outcome =>
             {
                 Assert.Null(outcome.FromCall);
-                Assert.IsType(failure == DispatchCases.NoHandler ? typeof(InvalidOperationException) : typeof(ProbeFailure), outcome.FromAwait);
+                if (failure == DispatchCases.NoHandler)
+                    Assert.IsType<InvalidOperationException>(outcome.FromAwait);
+                else
+                    Assert.Same(probe.Failure, outcome.FromAwait);
             })
             .RunAsync();
     }

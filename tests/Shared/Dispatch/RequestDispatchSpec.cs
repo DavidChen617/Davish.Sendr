@@ -139,18 +139,23 @@ public abstract class RequestDispatchSpec
     {
         var dispatch = DispatchCases.All[overload];
         Func<ISender, Task> call = null!;
+        DispatchProbe probe = null!;
 
         await new Scenario()
             .Given<DispatchContext>($"A sender, and {failure} for the message", ctx =>
             {
-                call = dispatch.Failing(failure, ctx.Probe);
+                probe = ctx.Probe;
+                call = dispatch.Failing(failure, probe);
                 ctx.Build(AddSenderUnderTest);
             })
             .When($"{overload} is called, and only then is the returned task awaited", ctx => DispatchCases.CallThenAwait(() => call(ctx.Sender)))
             .Then("Nothing escaped the call itself, and the task carries the failure", outcome =>
             {
                 Assert.Null(outcome.FromCall);
-                Assert.IsType(failure == DispatchCases.NoHandler ? typeof(InvalidOperationException) : typeof(ProbeFailure), outcome.FromAwait);
+                if (failure == DispatchCases.NoHandler)
+                    Assert.IsType<InvalidOperationException>(outcome.FromAwait);
+                else
+                    Assert.Same(probe.Failure, outcome.FromAwait);
             })
             .RunAsync();
     }
