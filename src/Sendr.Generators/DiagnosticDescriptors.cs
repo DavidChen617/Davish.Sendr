@@ -60,10 +60,21 @@ internal static class DiagnosticDescriptors
 
     public static readonly DiagnosticDescriptor ExternalHandlerNotAccessible = new(
         id: "SENDR007",
-        title: "External handler or decorator is not accessible",
+        title: "Handler or decorator is not accessible",
         messageFormat: "'{0}' was discovered in an included assembly but is not accessible from this project. " +
                         "Make it public (including any containing type), or grant this project access with " +
                         "[assembly: InternalsVisibleTo(\"...\")] in the library that declares it.",
+        category: "Davish.Sendr.Generators",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    // Same ID and title as ExternalHandlerNotAccessible: the cause is the same (the generated code
+    // cannot reach the type), only the fix differs for a type declared in this project.
+    public static readonly DiagnosticDescriptor LocalHandlerNotAccessible = new(
+        id: "SENDR007",
+        title: "Handler or decorator is not accessible",
+        messageFormat: "'{0}' is declared in this project but is not accessible to the generated code. " +
+                        "Make it internal or public, including any containing type.",
         category: "Davish.Sendr.Generators",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
