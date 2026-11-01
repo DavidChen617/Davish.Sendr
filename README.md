@@ -308,7 +308,7 @@ A failed handler marks only its own Handle span as `Error`; the Publish span is 
 > Both the reflection-based and the generated sender and publisher emit these spans. Generated code needs `Davish.Sendr` 3.6.0 or later at runtime, because it calls `SendrActivitySource`. Stream requests are not traced yet.
 
 > [!NOTE]
-> While a listener is subscribed, an exception that a handler (or a missing-handler check) throws synchronously is delivered through the returned `Task` instead, for sends and for notification handler steps, so `await` observes it the same way. Without a listener, behavior is unchanged.
+> `SendAsync` throws synchronously only for a `null` message (`ArgumentNullException`). Every other failure (no handler, a handler or decorator that cannot be resolved, or one that throws) is reported through the returned `Task`, whether or not a listener is subscribed. For notification handler steps, an exception thrown synchronously is delivered through the returned `Task` only while a listener is subscribed.
 
 ## Streams
 
