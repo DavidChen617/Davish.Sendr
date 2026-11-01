@@ -36,10 +36,21 @@ internal static class GeneratorHarness
         """;
 
     public static CSharpCompilation Compile(string assemblyName, string source, params MetadataReference[] references) =>
+        Create(assemblyName, source, BaseReferences.Value.AddRange(references));
+
+    /// <summary>Like <see cref="Compile"/>, but without Davish.Sendr: a project that references only Davish.Sendr.Abstractions.</summary>
+    public static CSharpCompilation CompileWithoutSendr(string assemblyName, string source) =>
+        Create(assemblyName, source,
+        [
+            .. BaseReferences.Value.Where(reference =>
+                Path.GetFileName((reference as PortableExecutableReference)?.FilePath) != "Davish.Sendr.dll"),
+        ]);
+
+    private static CSharpCompilation Create(string assemblyName, string source, IEnumerable<MetadataReference> references) =>
         CSharpCompilation.Create(
             assemblyName,
             [CSharpSyntaxTree.ParseText(GlobalUsings), CSharpSyntaxTree.ParseText(source)],
-            BaseReferences.Value.AddRange(references),
+            references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
     /// <summary>Emits <paramref name="library"/> and references it as metadata, the way a built ProjectReference is seen.</summary>

@@ -2,13 +2,14 @@ namespace Davish.Sendr;
 
 /// <summary>
 /// Publishes notifications to their registered handlers. Resolve an instance from the service
-/// provider after calling <c>AddSendr</c>.
+/// provider after calling <c>AddSendrNotification</c>.
 /// </summary>
 public interface IPublisher
 {
     /// <summary>
-    /// Publishes a notification to every handler registered for its runtime type, running its
-    /// Sequence group in registration order. If no handlers are registered, this is a no-op —
+    /// Publishes a notification to every handler registered for its runtime type. The Sequence
+    /// group runs one handler at a time in registration order, the Parallel group starts every
+    /// handler at once, and the two groups run concurrently. If no handlers are registered, this is a no-op —
     /// safe to call for notifications collected polymorphically (for example from an outbox)
     /// where the concrete type isn't known at the call site.
     /// </summary>

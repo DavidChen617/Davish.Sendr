@@ -6,7 +6,7 @@ namespace Davish.Sendr.Implements;
 /// Per-container cache that maps a notification type to the closed
 /// <see cref="NotificationHandlers{TNotification}"/> type registered for it, so
 /// <see cref="Publisher"/> doesn't repeat the <see cref="Type.MakeGenericType"/> lookup on every
-/// publish. Registered as a singleton by <c>AddSendr</c>.
+/// publish. Registered as a singleton by <c>AddSendrNotification</c>.
 /// </summary>
 internal sealed class NotificationHandlersRegistry
 {

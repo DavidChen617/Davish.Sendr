@@ -12,11 +12,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             10.0.x
@@ -58,3 +58,27 @@ jobs:
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
+
+  github-release:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Generated notes list merged PRs since the previous v* tag. A hand-written
+      # .github/release-notes/<tag>.md, when present, is placed above them
+      # (e.g. to call out behavior changes).
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=(--verify-tag --generate-notes --title "$GITHUB_REF_NAME")
+          previous=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          [ -n "$previous" ] && args+=(--notes-start-tag "$previous")
+          notes=".github/release-notes/$GITHUB_REF_NAME.md"
+          [ -f "$notes" ] && args+=(--notes-file "$notes")
+          gh release create "$GITHUB_REF_NAME" "${args[@]}"

@@ -52,6 +52,10 @@ public partial class GeneratedSourceGenerationTests
     private static MetadataReference Library(string source, string name = "Lib", params MetadataReference[] references) =>
         GeneratorHarness.AsMetadata(GeneratorHarness.Compile(name, source, references));
 
+    /// <summary>References <paramref name="source"/> as a live compilation, the way an IDE sees a project reference.</summary>
+    private static MetadataReference LiveLibrary(string source, string name = "Lib") =>
+        GeneratorHarness.Compile(name, source).ToMetadataReference();
+
     private static GeneratorRun RunHost(string body, string declarations = "", params MetadataReference[] references) =>
         GeneratorHarness.Run(GeneratorHarness.Compile("Host", Host(body, declarations), references));
 
@@ -270,6 +274,49 @@ public partial class GeneratedSourceGenerationTests
             .Run();
     }
 
+    private static readonly IReadOnlyDictionary<string, string> PartialInvalidDecoratorShapes = new Dictionary<string, string>
+    {
+        ["a query handler"] = """
+            public sealed class NotADecorator;
+            public sealed record SplitQuery : IQuery<int>;
+            [DecorateWith<NotADecorator>]
+            public sealed partial class SplitQueryHandler : IQueryHandler<SplitQuery, int>
+            {
+                public Task<int> HandleAsync(SplitQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed partial class SplitQueryHandler : IDisposable
+            {
+                public void Dispose() { }
+            }
+            """,
+        ["a notification handler"] = """
+            public sealed class NotADecorator;
+            public sealed record SplitNote : INotification;
+            [DecorateWith<NotADecorator>]
+            public sealed partial class SplitNoteHandler : INotificationHandler<SplitNote>
+            {
+                public Task HandleAsync(SplitNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed partial class SplitNoteHandler : IDisposable
+            {
+                public void Dispose() { }
+            }
+            """,
+    };
+
+    public static TheoryData<string> PartialInvalidDecoratorShapeNames => new(PartialInvalidDecoratorShapes.Keys);
+
+    [Theory]
+    [MemberData(nameof(PartialInvalidDecoratorShapeNames))]
+    public void GivenPartialHandlerWithInvalidDecoratorAndSeveralBaseLists_WhenGeneratorRuns_ThenSendr001IsReportedOnce(string shape)
+    {
+        new Scenario()
+            .Given($"{shape} split over two declarations with base lists, whose [DecorateWith] names a type that is not a decorator", () => PartialInvalidDecoratorShapes[shape])
+            .When("The generator runs", d => RunHost("services.AddSendr(o => o.UseGenerators()); services.AddSendrNotification(o => o.UseGenerators());", d))
+            .Then("SENDR001 is reported once", run => Assert.Single(run.Sendr("SENDR001")))
+            .Run();
+    }
+
     // ---- [DecorateWith] checks ----
 
     private const string PlainDecorators = """
@@ -478,6 +525,96 @@ public partial class GeneratedSourceGenerationTests
             .Run();
     }
 
+    private const string ProblemHandlersLibrary = """
+        using Davish.Sendr;
+
+        namespace Lib;
+
+        public sealed class Marker;
+        public sealed class NotADecorator;
+
+        public sealed record HiddenNote : INotification;
+
+        internal sealed class HiddenNoteHandler : INotificationHandler<HiddenNote>
+        {
+            public Task HandleAsync(HiddenNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
+        public sealed record DecoratedNote : INotification;
+
+        [DecorateWith<NotADecorator>]
+        public sealed class BadlyDecoratedNoteHandler : INotificationHandler<DecoratedNote>
+        {
+            public Task HandleAsync(DecoratedNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
+        public sealed record HiddenQuery : IQuery<int>;
+
+        internal sealed class HiddenQueryHandler : IQueryHandler<HiddenQuery, int>
+        {
+            public Task<int> HandleAsync(HiddenQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+        }
+
+        public sealed record DecoratedQuery : IQuery<int>;
+
+        [DecorateWith<NotADecorator>]
+        public sealed class BadlyDecoratedQueryHandler : IQueryHandler<DecoratedQuery, int>
+        {
+            public Task<int> HandleAsync(DecoratedQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+        }
+
+        public sealed record StructQuery : IQuery<int>;
+
+        public struct StructQueryHandler : IQueryHandler<StructQuery, int>
+        {
+            public Task<int> HandleAsync(StructQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+        }
+        """;
+
+    private static readonly string[] ProblemNotificationHandlers = ["HiddenNoteHandler", "BadlyDecoratedNoteHandler"];
+    private static readonly string[] ProblemQueryHandlers = ["HiddenQueryHandler", "BadlyDecoratedQueryHandler", "StructQueryHandler"];
+
+    /// <summary>Which of the library's problem handlers the run's SENDR001/004/007 diagnostics name, one entry per diagnostic.</summary>
+    private static string[] ProblemHandlersReported(GeneratorRun run) =>
+    [
+        .. run.Diagnostics
+            .Where(d => d.Id is "SENDR001" or "SENDR004" or "SENDR007")
+            .Select(d => ProblemNotificationHandlers.Concat(ProblemQueryHandlers).Single(name => d.GetMessage().Contains($"Lib.{name}'")))
+            .Order(),
+    ];
+
+    public static TheoryData<string> OneSide => new() { "sender", "publisher" };
+
+    [Theory]
+    [MemberData(nameof(OneSide))]
+    public void GivenProblemHandlersInAssemblyIncludedOnOneSide_WhenGeneratorRuns_ThenOnlyThatSidesDiagnosticsAreReported(string side)
+    {
+        var body = side == "sender"
+            ? "services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>())); services.AddSendrNotification(o => o.UseGenerators());"
+            : "services.AddSendr(o => o.UseGenerators()); services.AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>()));";
+        var expected = side == "sender" ? ProblemQueryHandlers : ProblemNotificationHandlers;
+
+        new Scenario()
+            .Given("An included library with problem notification handlers and problem query handlers", () => Library(ProblemHandlersLibrary))
+            .When($"Only the {side} side includes it and the generator runs", library => RunHost(body, "", library))
+            .Then($"Only the {side} side's handlers are reported, once each", run =>
+                Assert.Equal(expected.Order(), ProblemHandlersReported(run)))
+            .Run();
+    }
+
+    [Fact]
+    public void GivenProblemHandlersInAssemblyIncludedOnBothSides_WhenGeneratorRuns_ThenEveryDiagnosticIsReported()
+    {
+        new Scenario()
+            .Given("An included library with problem notification handlers and problem query handlers", () => Library(ProblemHandlersLibrary))
+            .When("Both sides include it and the generator runs", library => RunHost(
+                "services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>())); " +
+                "services.AddSendrNotification(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>()));", "", library))
+            .Then("Every problem handler is reported, once each", run =>
+                Assert.Equal(ProblemNotificationHandlers.Concat(ProblemQueryHandlers).Order(), ProblemHandlersReported(run)))
+            .Run();
+    }
+
     // ---- UseGenerators configuration syntax ----
 
     private static readonly IReadOnlyDictionary<string, (string Body, string Declarations)> UnsupportedConfigurations = new Dictionary<string, (string, string)>
@@ -645,6 +782,73 @@ public partial class GeneratedSourceGenerationTests
                 var diagnostic = Assert.Single(run.Sendr("SENDR007"));
                 Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
                 Assert.Contains(inaccessible, diagnostic.GetMessage());
+                Assert.Contains("included assembly", diagnostic.GetMessage());
+            })
+            .Run();
+    }
+
+    private static readonly IReadOnlyDictionary<string, (string Declarations, string Inaccessible)> LocalInaccessibleShapes = new Dictionary<string, (string, string)>
+    {
+        ["a private nested handler"] = ("""
+            public sealed record HiddenQuery : IQuery<int>;
+            public static class Outer
+            {
+                private sealed class HiddenQueryHandler : IQueryHandler<HiddenQuery, int>
+                {
+                    public Task<int> HandleAsync(HiddenQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+                }
+            }
+            """, "HiddenQueryHandler"),
+        ["a protected nested handler"] = ("""
+            public sealed record ShieldedQuery : IQuery<int>;
+            public class Outer
+            {
+                protected sealed class ShieldedQueryHandler : IQueryHandler<ShieldedQuery, int>
+                {
+                    public Task<int> HandleAsync(ShieldedQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+                }
+            }
+            """, "ShieldedQueryHandler"),
+        ["a public handler with a private nested decorator"] = ("""
+            public static class Outer
+            {
+                private sealed class SecretDecorator : IQueryDecorator
+                {
+                    public Task<TResponse> HandleAsync<TQuery, TResponse>(TQuery query, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+                        where TQuery : IQuery<TResponse> => next();
+                }
+
+                public sealed record OpenQuery : IQuery<int>;
+
+                [DecorateWith<SecretDecorator>]
+                public sealed class OpenQueryHandler : IQueryHandler<OpenQuery, int>
+                {
+                    public Task<int> HandleAsync(OpenQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+                }
+            }
+            """, "SecretDecorator"),
+    };
+
+    public static TheoryData<string> LocalInaccessibleShapeNames => new(LocalInaccessibleShapes.Keys);
+
+    [Theory]
+    [MemberData(nameof(LocalInaccessibleShapeNames))]
+    public void GivenInaccessibleNestedHandlerOrDecoratorInThisCompilation_WhenGeneratorRuns_ThenSendr007SaysItIsDeclaredInThisProject(string shape)
+    {
+        var (declarations, inaccessible) = LocalInaccessibleShapes[shape];
+
+        new Scenario()
+            .Given($"This compilation declares {shape}, which the generated code cannot reach", () => declarations)
+            .When("The generator runs", d => RunHost("services.AddSendr(o => o.UseGenerators());", d))
+            .Then("SENDR007 says the type is declared in this project, without pointing at included assemblies", run =>
+            {
+                var diagnostic = Assert.Single(run.Sendr("SENDR007"));
+                Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+                var message = diagnostic.GetMessage();
+                Assert.Contains(inaccessible, message);
+                Assert.Contains("declared in this project", message);
+                Assert.DoesNotContain("included assembly", message);
+                Assert.DoesNotContain("InternalsVisibleTo", message);
             })
             .Run();
     }
@@ -669,6 +873,143 @@ public partial class GeneratedSourceGenerationTests
             {
                 Assert.Empty(run.Diagnostics);
                 Assert.True(run.Dispatches("Lib.FriendQueryHandler"));
+                Assert.Empty(run.CompileErrors);
+            })
+            .Run();
+    }
+
+    // ---- Included assemblies referenced as compilations ----
+
+    private static readonly IReadOnlyDictionary<string, (string Source, string Id, string[] Named)> LiveLibraryProblems = new Dictionary<string, (string, string, string[])>
+    {
+        ["a decorator missing the required interface"] = ("""
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed class Marker;
+            public sealed class NotADecorator;
+            public sealed record BadQuery : IQuery<int>;
+            [DecorateWith<NotADecorator>]
+            public sealed class BadQueryHandler : IQueryHandler<BadQuery, int>
+            {
+                public Task<int> HandleAsync(BadQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """, "SENDR001", ["NotADecorator"]),
+        ["two [DecorateWith] attributes"] = ("""
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed class Marker;
+            public sealed class PassDecorator : IQueryDecorator
+            {
+                public Task<TResponse> HandleAsync<TQuery, TResponse>(TQuery query, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+                    where TQuery : IQuery<TResponse> => next();
+            }
+            public sealed record TwiceQuery : IQuery<int>;
+            [DecorateWith<PassDecorator>]
+            [DecorateWith<PassDecorator, PassDecorator>]
+            public sealed class TwiceQueryHandler : IQueryHandler<TwiceQuery, int>
+            {
+                public Task<int> HandleAsync(TwiceQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """, "SENDR001", ["TwiceQueryHandler", "TwiceQueryHandler"]),
+        ["an internal decorator"] = ("""
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed class Marker;
+            internal sealed class SecretDecorator : IQueryDecorator
+            {
+                public Task<TResponse> HandleAsync<TQuery, TResponse>(TQuery query, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+                    where TQuery : IQuery<TResponse> => next();
+            }
+            public sealed record OpenQuery : IQuery<int>;
+            [DecorateWith<SecretDecorator>]
+            public sealed class OpenQueryHandler : IQueryHandler<OpenQuery, int>
+            {
+                public Task<int> HandleAsync(OpenQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """, "SENDR007", ["SecretDecorator"]),
+        ["an internal handler"] = ("""
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed class Marker;
+            public sealed record SecretQuery : IQuery<int>;
+            internal sealed class SecretQueryHandler : IQueryHandler<SecretQuery, int>
+            {
+                public Task<int> HandleAsync(SecretQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """, "SENDR007", ["SecretQueryHandler"]),
+    };
+
+    public static TheoryData<string> LiveLibraryProblemNames => new(LiveLibraryProblems.Keys);
+
+    [Theory]
+    [MemberData(nameof(LiveLibraryProblemNames))]
+    public void GivenDecoratorProblemInAssemblyIncludedAsCompilationReference_WhenGeneratorRuns_ThenItIsReportedAndGenerationSucceeds(string problem)
+    {
+        var (source, id, named) = LiveLibraryProblems[problem];
+
+        new Scenario()
+            .Given($"An included library with {problem}, referenced as a live compilation rather than a built assembly", () => LiveLibrary(source))
+            .When("The generator runs", library => RunHost("services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>()));", "", library))
+            .Then("The generator did not fail, the problem is reported as an error, and UseGenerators is still generated", run =>
+            {
+                Assert.Empty(run.Diagnostics.Where(d => d.Id == "CS8785"));
+                var reported = run.Sendr(id);
+                Assert.Equal(named.Length, reported.Length);
+                Assert.All(reported, d => Assert.Equal(DiagnosticSeverity.Error, d.Severity));
+                Assert.All(named.Zip(reported), pair => Assert.Contains(pair.First, pair.Second.GetMessage()));
+                Assert.Contains("UseGenerators(", run.GeneratedSource);
+            })
+            .Run();
+    }
+
+    // ---- Davish.Sendr not referenced ----
+
+    private static readonly IReadOnlyDictionary<string, string> AbstractionsOnlyProjects = new Dictionary<string, string>
+    {
+        ["no handlers"] = "namespace Lib; public sealed class Nothing;",
+        ["a handler"] = """
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed record LibQuery : IQuery<int>;
+            public sealed class LibQueryHandler : IQueryHandler<LibQuery, int>
+            {
+                public Task<int> HandleAsync(LibQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed record LibNote : INotification;
+            public sealed class LibNoteHandler : INotificationHandler<LibNote>
+            {
+                public Task HandleAsync(LibNote notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """,
+        ["a struct handler"] = """
+            using Davish.Sendr;
+            namespace Lib;
+            public sealed record StructQuery : IQuery<int>;
+            public struct StructQueryHandler : IQueryHandler<StructQuery, int>
+            {
+                public Task<int> HandleAsync(StructQuery query, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """,
+    };
+
+    public static TheoryData<string> AbstractionsOnlyProjectNames => new(AbstractionsOnlyProjects.Keys);
+
+    [Theory]
+    [MemberData(nameof(AbstractionsOnlyProjectNames))]
+    public void GivenProjectReferencingAbstractionsButNotSendr_WhenGeneratorRuns_ThenNothingIsGeneratedAndSendr008IsReported(string contents)
+    {
+        new Scenario()
+            .Given($"A project that references Davish.Sendr.Abstractions and the generator but not Davish.Sendr, with {contents}", () =>
+                GeneratorHarness.CompileWithoutSendr("Lib", AbstractionsOnlyProjects[contents]))
+            .When("The generator runs", GeneratorHarness.Run)
+            .Then("Nothing is generated, SENDR008 is the only generator diagnostic, and the project compiles", run =>
+            {
+                Assert.Equal("", run.GeneratedSource);
+                var diagnostic = Assert.Single(run.Diagnostics);
+                Assert.Equal("SENDR008", diagnostic.Id);
+                Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+                Assert.Contains("Davish.Sendr is not", diagnostic.GetMessage());
+                Assert.Contains("IncludeAssemblyOf", diagnostic.GetMessage());
                 Assert.Empty(run.CompileErrors);
             })
             .Run();

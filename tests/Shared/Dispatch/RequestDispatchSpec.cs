@@ -134,6 +134,33 @@ public abstract class RequestDispatchSpec
     }
 
     [Theory]
+    [MemberData(nameof(DispatchCases.AllOverloadsWithSynchronousFailures), MemberType = typeof(DispatchCases))]
+    public async Task GivenNoHandlerOrSynchronouslyThrowingHandler_WhenSendAsyncCalled_ThenReturnsFaultedTaskInsteadOfThrowing(string overload, string failure)
+    {
+        var dispatch = DispatchCases.All[overload];
+        Func<ISender, Task> call = null!;
+        DispatchProbe probe = null!;
+
+        await new Scenario()
+            .Given<DispatchContext>($"A sender, and {failure} for the message", ctx =>
+            {
+                probe = ctx.Probe;
+                call = dispatch.Failing(failure, probe);
+                ctx.Build(AddSenderUnderTest);
+            })
+            .When($"{overload} is called, and only then is the returned task awaited", ctx => DispatchCases.CallThenAwait(() => call(ctx.Sender)))
+            .Then("Nothing escaped the call itself, and the task carries the failure", outcome =>
+            {
+                Assert.Null(outcome.FromCall);
+                if (failure == DispatchCases.NoHandler)
+                    Assert.IsType<InvalidOperationException>(outcome.FromAwait);
+                else
+                    Assert.Same(probe.Failure, outcome.FromAwait);
+            })
+            .RunAsync();
+    }
+
+    [Theory]
     [MemberData(nameof(DispatchCases.AllOverloads), MemberType = typeof(DispatchCases))]
     public async Task GivenHandlerThrows_WhenSendAsyncAwaited_ThenOriginalExceptionPropagatesUnwrapped(string overload)
     {

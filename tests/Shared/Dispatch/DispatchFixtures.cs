@@ -393,7 +393,9 @@ public sealed record DispatchCase(
     Func<ISender, int, CancellationToken, Task<object?>> SendAsInterface,
     Func<ISender, int, CancellationToken, Task<object?>> SendAsBaseType,
     Func<ISender, CancellationToken, Task> SendNull,
-    Func<ISender, CancellationToken, Task> SendOrphan);
+    Func<ISender, CancellationToken, Task> SendOrphan,
+    // Returns SendAsync's task as is, unlike the async SendConcrete, so a synchronous throw stays visible.
+    Func<ISender, int, CancellationToken, Task> CallConcrete);
 
 public static class DispatchCases
 {
@@ -405,38 +407,100 @@ public static class DispatchCases
             async (s, v, ct) => { IRequest m = new ProbeRequest(v); await s.SendAsync(m, ct); return null; },
             async (s, v, ct) => { ProbeRequestBase m = new ProbeRequest(v); await s.SendAsync(m, ct); return null; },
             (s, ct) => s.SendAsync((IRequest)null!, ct),
-            (s, ct) => s.SendAsync(new OrphanRequest(), ct)),
+            (s, ct) => s.SendAsync(new OrphanRequest(), ct),
+            (s, v, ct) => s.SendAsync(new ProbeRequest(v), ct)),
         new DispatchCase(
             "SendAsync(IRequest<T>)", typeof(ProbeRequestForValue), "request", nameof(ProbeRequestForValueHandler), HasResponse: true, "request", "AddRequestHandler", typeof(OrphanRequestForValue),
             async (s, v, ct) => await s.SendAsync(new ProbeRequestForValue(v), ct),
             async (s, v, ct) => { IRequest<int> m = new ProbeRequestForValue(v); return await s.SendAsync(m, ct); },
             async (s, v, ct) => { ProbeRequestForValueBase m = new ProbeRequestForValue(v); return await s.SendAsync(m, ct); },
             (s, ct) => s.SendAsync((IRequest<int>)null!, ct),
-            (s, ct) => s.SendAsync(new OrphanRequestForValue(), ct)),
+            (s, ct) => s.SendAsync(new OrphanRequestForValue(), ct),
+            (s, v, ct) => s.SendAsync(new ProbeRequestForValue(v), ct)),
         new DispatchCase(
             "SendAsync(ICommand)", typeof(ProbeCommand), "command", nameof(ProbeCommandHandler), HasResponse: false, "command", "AddCommandHandler", typeof(OrphanCommand),
             async (s, v, ct) => { await s.SendAsync(new ProbeCommand(v), ct); return null; },
             async (s, v, ct) => { ICommand m = new ProbeCommand(v); await s.SendAsync(m, ct); return null; },
             async (s, v, ct) => { ProbeCommandBase m = new ProbeCommand(v); await s.SendAsync(m, ct); return null; },
             (s, ct) => s.SendAsync((ICommand)null!, ct),
-            (s, ct) => s.SendAsync(new OrphanCommand(), ct)),
+            (s, ct) => s.SendAsync(new OrphanCommand(), ct),
+            (s, v, ct) => s.SendAsync(new ProbeCommand(v), ct)),
         new DispatchCase(
             "SendAsync(ICommand<T>)", typeof(ProbeCommandForValue), "command", nameof(ProbeCommandForValueHandler), HasResponse: true, "command", "AddCommandHandler", typeof(OrphanCommandForValue),
             async (s, v, ct) => await s.SendAsync(new ProbeCommandForValue(v), ct),
             async (s, v, ct) => { ICommand<int> m = new ProbeCommandForValue(v); return await s.SendAsync(m, ct); },
             async (s, v, ct) => { ProbeCommandForValueBase m = new ProbeCommandForValue(v); return await s.SendAsync(m, ct); },
             (s, ct) => s.SendAsync((ICommand<int>)null!, ct),
-            (s, ct) => s.SendAsync(new OrphanCommandForValue(), ct)),
+            (s, ct) => s.SendAsync(new OrphanCommandForValue(), ct),
+            (s, v, ct) => s.SendAsync(new ProbeCommandForValue(v), ct)),
         new DispatchCase(
             "SendAsync(IQuery<T>)", typeof(ProbeQuery), "query", nameof(ProbeQueryHandler), HasResponse: true, "query", "AddQueryHandler", typeof(OrphanQuery),
             async (s, v, ct) => await s.SendAsync(new ProbeQuery(v), ct),
             async (s, v, ct) => { IQuery<int> m = new ProbeQuery(v); return await s.SendAsync(m, ct); },
             async (s, v, ct) => { ProbeQueryBase m = new ProbeQuery(v); return await s.SendAsync(m, ct); },
             (s, ct) => s.SendAsync((IQuery<int>)null!, ct),
-            (s, ct) => s.SendAsync(new OrphanQuery(), ct)),
+            (s, ct) => s.SendAsync(new OrphanQuery(), ct),
+            (s, v, ct) => s.SendAsync(new ProbeQuery(v), ct)),
     }.ToDictionary(c => c.Overload);
 
     public static TheoryData<string> AllOverloads => new(All.Keys);
+
+    public const string NoHandler = "no handler";
+    public const string SynchronousThrow = "a handler that throws synchronously";
+
+    /// <summary>Every overload with each failure that used to escape SendAsync synchronously.</summary>
+    public static TheoryData<string, string> AllOverloadsWithSynchronousFailures
+    {
+        get
+        {
+            var data = new TheoryData<string, string>();
+            foreach (var overload in All.Keys)
+            {
+                data.Add(overload, NoHandler);
+                data.Add(overload, SynchronousThrow);
+            }
+
+            return data;
+        }
+    }
+
+    /// <summary>
+    /// Calls SendAsync without awaiting it, then awaits the returned task: what escaped the call itself,
+    /// and what the task faulted with.
+    /// </summary>
+    public static async Task<(Exception? FromCall, Exception? FromAwait)> CallThenAwait(Func<Task> call)
+    {
+        Task task;
+        try
+        {
+            task = call();
+        }
+        catch (Exception fromCall)
+        {
+            return (fromCall, null);
+        }
+
+        try
+        {
+            await task;
+            return (null, null);
+        }
+        catch (Exception fromAwait)
+        {
+            return (null, fromAwait);
+        }
+    }
+
+    /// <summary>Sets up <paramref name="failure"/> on <paramref name="probe"/> and returns the call that hits it.</summary>
+    public static Func<ISender, Task> Failing(this DispatchCase dispatch, string failure, DispatchProbe probe)
+    {
+        if (failure == NoHandler)
+            return sender => dispatch.SendOrphan(sender, CancellationToken.None);
+
+        probe.Failure = new ProbeFailure();
+        probe.ThrowSynchronously = true;
+        return sender => dispatch.CallConcrete(sender, 21, CancellationToken.None);
+    }
 
     public static TheoryData<string> WithoutResponse => new(All.Values.Where(c => !c.HasResponse).Select(c => c.Overload));
 

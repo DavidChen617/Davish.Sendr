@@ -448,6 +448,78 @@ public class ServiceRegistrationTests
             .RunAsync();
     }
 
+    private static IEnumerable<(string Builder, Action<IServiceCollection> Register, Func<IServiceProvider, Task> Dispatch)> PipelinesDecoratedWith<TDecorator>()
+        where TDecorator : IRequestDecorator, IRequestDecorator.WithResponse, IStreamRequestDecorator,
+            ICommandDecorator, ICommandDecorator.WithResponse, IQueryDecorator, INotificationDecorator =>
+    [
+        ("AddRequestHandler<TRequest, THandler>",
+            s => s.AddRequestHandler<Ping, PingHandler>(x => x.Decorator.With<TDecorator>()),
+            sp => sp.GetRequiredService<ISender>().SendAsync(new Ping(), CancellationToken.None)),
+        ("AddRequestHandler<TRequest, TResponse, THandler>",
+            s => s.AddRequestHandler<PingForValue, int, PingForValueHandler>(x => x.Decorator.With<TDecorator>()),
+            sp => sp.GetRequiredService<ISender>().SendAsync(new PingForValue(), CancellationToken.None)),
+        ("AddStreamRequestHandler",
+            s => s.AddStreamRequestHandler<CountUp, int, CountUpHandler>(x => x.Decorator.With<TDecorator>()),
+            async sp => { await foreach (var _ in sp.GetRequiredService<IStreamSender>().SendStream(new CountUp(), CancellationToken.None)) { } }),
+        ("AddCommandHandler<TCommand, THandler>",
+            s => s.AddCommandHandler<DoThing, DoThingHandler>(x => x.Decorator.With<TDecorator>()),
+            sp => sp.GetRequiredService<ISender>().SendAsync(new DoThing(), CancellationToken.None)),
+        ("AddCommandHandler<TCommand, TResponse, THandler>",
+            s => s.AddCommandHandler<DoThingForValue, int, DoThingForValueHandler>(x => x.Decorator.With<TDecorator>()),
+            sp => sp.GetRequiredService<ISender>().SendAsync(new DoThingForValue(), CancellationToken.None)),
+        ("AddQueryHandler",
+            s => s.AddQueryHandler<GetValue, int, GetValueHandler>(x => x.Decorator.With<TDecorator>()),
+            sp => sp.GetRequiredService<ISender>().SendAsync(new GetValue(), CancellationToken.None)),
+        ("AddNotificationHandler (handler entry)",
+            s => s.AddNotificationHandler<Pinged>(x => x.Handler.Sequence.With<PingedHandler>(h => h.Decorator.With<TDecorator>())),
+            sp => sp.GetRequiredService<IPublisher>().PublishAsync(new Pinged(), CancellationToken.None)),
+    ];
+
+    public static TheoryData<string, string, Action<IServiceCollection>, Action<IServiceCollection>, Func<IServiceProvider, Task>> AbstractlyDecoratedPipelines
+    {
+        get
+        {
+            var data = new TheoryData<string, string, Action<IServiceCollection>, Action<IServiceCollection>, Func<IServiceProvider, Task>>();
+            foreach (var (builder, register, dispatch) in PipelinesDecoratedWith<IAppDecorator>())
+                data.Add(builder, "interface", register, s => s.AddTransient<IAppDecorator, AppDecorator>(), dispatch);
+            foreach (var (builder, register, dispatch) in PipelinesDecoratedWith<AppDecoratorBase>())
+                data.Add(builder, "abstract class", register, s => s.AddTransient<AppDecoratorBase, AppDecorator>(), dispatch);
+            return data;
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AbstractlyDecoratedPipelines))]
+    public async Task GivenInterfaceOrAbstractDecoratorRegisteredAfterAddHandler_WhenDispatched_ThenProviderBuildsAndRegisteredImplementationRuns(
+        string builder, string abstraction, Action<IServiceCollection> register, Action<IServiceCollection> registerImplementation,
+        Func<IServiceProvider, Task> dispatch)
+    {
+        var log = new DecoratorLog();
+
+        await new Scenario()
+            .Given($"{builder}'s Decorator.With an {abstraction}, whose implementation the application registers only afterwards", () =>
+            {
+                var services = new ServiceCollection()
+                    .AddSingleton<CallLog>()
+                    .AddSingleton<NotificationLog>()
+                    .AddSingleton(log)
+                    .AddSendr()
+                    .AddSendrNotification();
+                register(services);
+                registerImplementation(services);
+                return (Func<ServiceProvider>)(() => services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true }));
+            })
+            .When("The provider is built with ValidateOnBuild and the message is dispatched", async build =>
+            {
+                using var provider = build();
+                using var scope = provider.CreateScope();
+                await dispatch(scope.ServiceProvider);
+            })
+            .Then("The application's implementation is the decorator that ran", _ =>
+                Assert.IsType<AppDecorator>(Assert.Single(log.Instances)))
+            .RunAsync();
+    }
+
     public static TheoryData<string, Action<IServiceCollection>> NotificationGroups => new()
     {
         { "Sequence", s => s.AddNotificationHandler<Pinged>(x => x.Handler.Sequence.With<PingedHandler>()) },
@@ -732,6 +804,78 @@ public sealed class RecordingDecorator(DecoratorLog log) :
     {
         Record();
         return next();
+    }
+}
+
+// A decorator contract an application implements itself; Decorator.With names the abstraction.
+public interface IAppDecorator :
+    IRequestDecorator,
+    IRequestDecorator.WithResponse,
+    IStreamRequestDecorator,
+    ICommandDecorator,
+    ICommandDecorator.WithResponse,
+    IQueryDecorator,
+    INotificationDecorator;
+
+public abstract class AppDecoratorBase : IAppDecorator
+{
+    protected abstract void Record();
+
+    public Task HandleAsync<TRequest>(TRequest request, RequestHandlerDelegate next, CancellationToken cancellationToken)
+        where TRequest : IRequest
+    {
+        Record();
+        return next();
+    }
+
+    Task<TResponse> IRequestDecorator.WithResponse.HandleAsync<TRequest, TResponse>(
+        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        Record();
+        return next();
+    }
+
+    IAsyncEnumerable<TResponse> IStreamRequestDecorator.HandleAsync<TRequest, TResponse>(
+        TRequest request, StreamHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        Record();
+        return next();
+    }
+
+    Task ICommandDecorator.HandleAsync<TCommand>(TCommand command, RequestHandlerDelegate next, CancellationToken cancellationToken)
+    {
+        Record();
+        return next();
+    }
+
+    Task<TResponse> ICommandDecorator.WithResponse.HandleAsync<TCommand, TResponse>(
+        TCommand command, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        Record();
+        return next();
+    }
+
+    Task<TResponse> IQueryDecorator.HandleAsync<TQuery, TResponse>(
+        TQuery query, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        Record();
+        return next();
+    }
+
+    Task INotificationDecorator.HandleAsync<TNotification>(
+        TNotification notification, NotificationHandlerDelegate next, CancellationToken cancellationToken)
+    {
+        Record();
+        return next();
+    }
+}
+
+public sealed class AppDecorator(DecoratorLog log) : AppDecoratorBase
+{
+    protected override void Record()
+    {
+        lock (log.Instances)
+            log.Instances.Add(this);
     }
 }
 

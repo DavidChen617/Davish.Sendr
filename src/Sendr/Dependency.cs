@@ -49,6 +49,19 @@ public static class Dependency
         ExceptionDispatchInfo.Capture(originalException).Throw();
     }
 
+    /// <summary>
+    /// Registers a decorator named by <c>Decorator.With&lt;T&gt;()</c> as its own transient
+    /// implementation, unless the application already registered it. An interface or abstract
+    /// decorator is left for the application to register, as the source generator does:
+    /// registering it as its own implementation makes <c>BuildServiceProvider()</c> throw even when
+    /// the application registers a concrete implementation afterwards.
+    /// </summary>
+    internal static void TryAddDecorator(IServiceCollection services, Type decoratorType)
+    {
+        if (!decoratorType.IsInterface && !decoratorType.IsAbstract)
+            services.TryAddTransient(decoratorType);
+    }
+
     extension(IServiceCollection services)
     {
         /// <summary>
@@ -127,7 +140,7 @@ public static class Dependency
             var decorators = options.Decorators.ToArray();
 
             foreach (var decoratorType in decorators)
-                services.TryAddTransient(decoratorType);
+                TryAddDecorator(services, decoratorType);
 
             services.AddTransient<IRequestHandler<TRequest, TResponse>>(pv =>
             {
@@ -186,7 +199,7 @@ public static class Dependency
             var decorators = options.Decorators.ToArray();
 
             foreach (var decoratorType in decorators)
-                services.TryAddTransient(decoratorType);
+                TryAddDecorator(services, decoratorType);
 
             services.AddTransient<IRequestHandler<TRequest>>(pv =>
             {
@@ -244,7 +257,7 @@ public static class Dependency
             var decorators = options.Decorators.ToArray();
 
             foreach (var decoratorType in decorators)
-                services.TryAddTransient(decoratorType);
+                TryAddDecorator(services, decoratorType);
 
             services.AddTransient<IStreamRequestHandler<TRequest, TResponse>>(pv =>
             {
@@ -301,7 +314,7 @@ public static class Dependency
             var decorators = options.Decorators.ToArray();
 
             foreach (var decoratorType in decorators)
-                services.TryAddTransient(decoratorType);
+                TryAddDecorator(services, decoratorType);
 
             services.AddTransient<ICommandHandler<TCommand>>(pv =>
             {
@@ -359,7 +372,7 @@ public static class Dependency
             var decorators = options.Decorators.ToArray();
 
             foreach (var decoratorType in decorators)
-                services.TryAddTransient(decoratorType);
+                TryAddDecorator(services, decoratorType);
 
             services.AddTransient<ICommandHandler<TCommand, TResponse>>(pv =>
             {
@@ -417,7 +430,7 @@ public static class Dependency
             var decorators = options.Decorators.ToArray();
 
             foreach (var decoratorType in decorators)
-                services.TryAddTransient(decoratorType);
+                TryAddDecorator(services, decoratorType);
 
             services.AddTransient<IQueryHandler<TQuery, TResponse>>(pv =>
             {

@@ -1,0 +1,10 @@
+{{- $lang := .Get "lang" -}}
+{{- $text := .Get "text" -}}
+{{- $matches := where .Page.Translations "Lang" $lang -}}
+{{- with $matches -}}
+{{- with index . 0 -}}
+<a href="{{ .RelPermalink }}">{{ $text }}</a>
+{{- end -}}
+{{- else -}}
+{{- errorf "i18n-link shortcode: page %q has no %q translation" .Page.RelPermalink $lang -}}
+{{- end -}}

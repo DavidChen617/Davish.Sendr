@@ -3,11 +3,13 @@ namespace Davish.Sendr;
 
 /// <summary>
 /// Declares that a handler discovered by the Davish.Sendr source generator should be wrapped
-/// with the given decorator(s) when <c>AddSendrGenerated</c> composes its pipeline, for example
+/// with the given decorator(s) when <c>UseGenerators()</c> composes its pipeline, for example
 /// <c>[DecorateWith&lt;TransactionDecorator, LoggingDecorator&gt;]</c>. Type arguments are applied
 /// outer to inner — the first one runs first, matching <c>x.Decorator.With&lt;T&gt;()</c>
-/// ordering — and each must implement <c>IRequestDecorator</c>, <c>IRequestDecorator.WithResponse</c>,
-/// or <c>IStreamRequestDecorator</c> as appropriate for the handler being decorated. Apply at most
+/// ordering — and each must implement the decorator interface for the kind of handler being
+/// decorated: <c>IRequestDecorator</c>, <c>IRequestDecorator.WithResponse</c>,
+/// <c>IStreamRequestDecorator</c>, <c>ICommandDecorator</c>, <c>ICommandDecorator.WithResponse</c>,
+/// <c>IQueryDecorator</c>, or <c>INotificationDecorator</c>. Apply at most
 /// one <c>[DecorateWith&lt;...&gt;]</c> per class; pick the overload with the arity you need (1 through 8).
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
