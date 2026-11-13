@@ -54,7 +54,7 @@ Davish.Sendr: no handler is registered for '<requestType>' with response '<respo
 | ID | 嚴重性 | 標題 | 什麼時候會發生 |
 |---|---|---|---|
 | `SENDR001` | Error | Invalid `[DecorateWith]` usage | `[DecorateWith<...>]` 的某個型別參數，沒有實作該 handler 所屬的訊息種類所需的 decorator 介面。 |
-| `SENDR002` | Error | Multiple handlers registered for the same request | 有超過一個被發現的 handler（本地或來自某個被納入的 assembly）指向同一個 request/response 組合。不適用於 notification handler。 |
+| `SENDR002` | Error | Multiple handlers registered for the same request | 有超過一個被發現的 handler（本地或來自某個被納入的 assembly）指向同一個 request/response 組合。回報在本專案宣告的 handler 上（另一個也在本專案時，列為 additional location）；兩個都來自被納入的 assembly 時，回報在引入第二個 handler 的 `IncludeAssemblyOf<...>()` 呼叫上。不適用於 notification handler。 |
 | `SENDR003` | Info | Open generic handler is not discovered | 發現了一個 open generic 的 handler 類別並跳過；請改用手動註冊一個封閉建構的型別。 |
 | `SENDR004` | Error | Value type cannot be a Davish.Sendr handler | 某個 handler 宣告成 `struct`/`record struct`。Handler 解析要求是參考型別，請改用 `class`/`record class`。 |
 | `SENDR005` | Error | Unsupported `UseGenerators()` configuration | 某個 `IncludeAssemblyOf<...>()` 呼叫沒有直接寫在 `UseGenerators(g => ...)` 的 lambda 裡（例如放在 delegate 變數、method group、迴圈、條件式，或包一層 wrapper helper/extension method），source generator 無法從原始碼讀出它。 |

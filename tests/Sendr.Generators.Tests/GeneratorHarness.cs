@@ -49,7 +49,8 @@ internal static class GeneratorHarness
     private static CSharpCompilation Create(string assemblyName, string source, IEnumerable<MetadataReference> references) =>
         CSharpCompilation.Create(
             assemblyName,
-            [CSharpSyntaxTree.ParseText(GlobalUsings), CSharpSyntaxTree.ParseText(source)],
+            // Distinct file paths, as in a real project: the generator maps SENDR002's span back to its tree by path.
+            [CSharpSyntaxTree.ParseText(GlobalUsings, path: "GlobalUsings.cs"), CSharpSyntaxTree.ParseText(source, path: $"{assemblyName}.cs")],
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
