@@ -239,6 +239,27 @@ public partial class GeneratedSourceGenerationTests
             .Run();
     }
 
+    [Fact]
+    public void GivenDuplicateHandlersInTreesWithoutFilePaths_WhenGeneratorRuns_ThenSendr002IsReportedWithoutLocationAndGenerationSucceeds()
+    {
+        new Scenario()
+            .Given("A host whose two syntax trees both have the file path \"\", one of them declaring two handlers for the same query", () =>
+                GeneratorHarness.CompileWithoutPaths("Host", Host("services.AddSendr(o => o.UseGenerators());", """
+                    public sealed record Dup : IQuery<int>;
+                    public sealed class FirstDupHandler : IQueryHandler<Dup, int> { public Task<int> HandleAsync(Dup query, CancellationToken cancellationToken) => Task.FromResult(1); }
+                    public sealed class SecondDupHandler : IQueryHandler<Dup, int> { public Task<int> HandleAsync(Dup query, CancellationToken cancellationToken) => Task.FromResult(2); }
+                    """)))
+            .When("The generator runs", GeneratorHarness.Run)
+            .Then("SENDR002 is reported once, without a source location, and the generator did not fail", run =>
+            {
+                Assert.Empty(run.Diagnostics.Where(d => d.Id == "CS8785"));
+                var diagnostic = Assert.Single(run.Sendr("SENDR002"));
+                Assert.False(diagnostic.Location.IsInSource);
+                Assert.Empty(diagnostic.AdditionalLocations);
+            })
+            .Run();
+    }
+
     private static string SourceText(Location location) => location.SourceTree!.GetText().ToString(location.SourceSpan);
 
     public static TheoryData<string> TwoResponseFamilies => new() { "IRequest<T>", "ICommand<T>", "IQuery<T>", "IStreamRequest<T>" };

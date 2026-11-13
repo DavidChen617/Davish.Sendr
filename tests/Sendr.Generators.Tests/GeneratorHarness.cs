@@ -46,11 +46,22 @@ internal static class GeneratorHarness
                 Path.GetFileName((reference as PortableExecutableReference)?.FilePath) != "Davish.Sendr.dll"),
         ]);
 
-    private static CSharpCompilation Create(string assemblyName, string source, IEnumerable<MetadataReference> references) =>
+    /// <summary>
+    /// Like <see cref="Compile"/>, but its syntax trees have no file path (all ""), as trees parsed in memory without
+    /// one do. The generator then cannot tell them apart by path.
+    /// </summary>
+    public static CSharpCompilation CompileWithoutPaths(string assemblyName, string source) =>
+        Create(assemblyName, source, BaseReferences.Value, withPaths: false);
+
+    private static CSharpCompilation Create(
+        string assemblyName, string source, IEnumerable<MetadataReference> references, bool withPaths = true) =>
         CSharpCompilation.Create(
             assemblyName,
             // Distinct file paths, as in a real project: the generator maps SENDR002's span back to its tree by path.
-            [CSharpSyntaxTree.ParseText(GlobalUsings, path: "GlobalUsings.cs"), CSharpSyntaxTree.ParseText(source, path: $"{assemblyName}.cs")],
+            [
+                CSharpSyntaxTree.ParseText(GlobalUsings, path: withPaths ? "GlobalUsings.cs" : ""),
+                CSharpSyntaxTree.ParseText(source, path: withPaths ? $"{assemblyName}.cs" : ""),
+            ],
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
