@@ -118,3 +118,6 @@ public sealed class GetOrderHandler : IRequestHandler<GetOrder, OrderDto>
 Source generator 會依該 handler 所屬的訊息種類所需的 decorator 介面，驗證屬性上的型別
 參數，不符合就在編譯期拒絕（`SENDR001`），詳見
 [例外與診斷](../reference/exceptions-and-diagnostics.md)。
+
+一個類別實作多種 handler 介面時，attribute 的 decorator 會套用到每一種，見
+[限制與注意事項](../reference/limitations.md#一個類別實作多種-handler-介面)。

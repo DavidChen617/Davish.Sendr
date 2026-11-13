@@ -86,6 +86,11 @@ public sealed record OrphanCommandForValue : ICommand<int>;
 public sealed record OrphanQuery : IQuery<int>;
 public sealed record OrphanStream : IStreamRequest<int>;
 
+// A concrete base command with a handler and a derived command without one: dispatch looks the handler up
+// by the message's runtime type, so the base handler does not cover the derived type.
+public record BaseOnlyCommand(int Value) : ICommand;
+public sealed record DerivedOfBaseOnlyCommand(int Value) : BaseOnlyCommand(Value);
+
 // ---- Probe handlers ----
 
 public abstract class ProbeHandler
@@ -176,6 +181,12 @@ public sealed class ProbeCommandHandler(DispatchProbe probe, ScopedMarker scoped
     : ProbeHandler(probe, scoped), ICommandHandler<ProbeCommand>
 {
     public Task HandleAsync(ProbeCommand command, CancellationToken cancellationToken) => Handle(cancellationToken);
+}
+
+public sealed class BaseOnlyCommandHandler(DispatchProbe probe, ScopedMarker scoped)
+    : ProbeHandler(probe, scoped), ICommandHandler<BaseOnlyCommand>
+{
+    public Task HandleAsync(BaseOnlyCommand command, CancellationToken cancellationToken) => Handle(cancellationToken);
 }
 
 [DecorateWith<ProbeOuterDecorator, ProbeInnerDecorator>]
@@ -369,6 +380,7 @@ public static class DispatchProbeRegistration
         .AddStreamRequestHandler<ProbeStream, int, ProbeStreamHandler>(x => x.Decorator.With<ProbeOuterDecorator>().With<ProbeInnerDecorator>())
         .AddRequestHandler<DualRequest, int, DualRequestIntHandler>()
         .AddRequestHandler<DualRequest, string, DualRequestStringHandler>()
+        .AddCommandHandler<BaseOnlyCommand, BaseOnlyCommandHandler>()
         .AddCommandHandler<DualCommand, int, DualCommandIntHandler>()
         .AddCommandHandler<DualCommand, string, DualCommandStringHandler>()
         .AddQueryHandler<DualQuery, int, DualQueryIntHandler>()
