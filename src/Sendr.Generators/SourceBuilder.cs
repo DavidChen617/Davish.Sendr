@@ -46,6 +46,40 @@ internal static class SourceBuilder
         sb.AppendLine("            \"compilation or in an assembly named via UseGenerators(g => g.IncludeAssemblyOf<TMarker>()) \" +");
         sb.AppendLine("            \"— or stop calling UseGenerators() for the sender and register every handler manually.\";");
         sb.AppendLine();
+        // TResponse is covariant, so a message declaring IQuery<string> can be sent through an
+        // IQuery<object> variable. Its handler was discovered, but the lookup asks for a response type
+        // the message never declared, and NotDiscovered's advice would not help. Same check and wording
+        // as the reflection sender's HandlerResolutionException; plain loops and global:: names because
+        // this compiles under the consumer's own TFM, language version and usings.
+        sb.Append("""
+                    private static string NotFound(
+                        global::System.Type requestType,
+                        global::System.Type responseType,
+                        global::System.Type messageInterface,
+                        string handlerDescription)
+                    {
+                        var declared = new global::System.Collections.Generic.List<global::System.Type>();
+                        foreach (var candidate in requestType.GetInterfaces())
+                            if (candidate.IsGenericType && candidate.GetGenericTypeDefinition() == messageInterface)
+                                declared.Add(candidate.GetGenericArguments()[0]);
+
+                        if (declared.Count == 0 || declared.Contains(responseType))
+                            return NotDiscovered(handlerDescription);
+
+                        var name = messageInterface.Name.Substring(0, messageInterface.Name.IndexOf('`'));
+                        var declaredNames = new string[declared.Count];
+                        for (var index = 0; index < declared.Count; index++)
+                            declaredNames[index] = name + "<" + declared[index].Name + ">";
+
+                        return "Davish.Sendr: no handler is found for '" + requestType + "' with response '" + responseType + "': " +
+                               "'" + requestType.Name + "' declares " + string.Join(", ", declaredNames) + ", " +
+                               "not " + name + "<" + responseType.Name + ">. It was sent as " + name + "<" + responseType.Name + "> (a covariant upcast), " +
+                               "so the handler was looked up with '" + responseType.Name + "' as the response type. " +
+                               "Send it as '" + requestType.Name + "' or as an interface it declares.";
+                    }
+
+            """);
+        sb.AppendLine();
         // A send reports failures through its task, never by throwing from SendAsync itself (only a null
         // message does). Async, like the traced path, so OperationCanceledException yields a canceled task
         // and the original instance is rethrown when awaited. ExceptionDispatchInfo.Capture(...).Throw()
@@ -273,7 +307,7 @@ internal static class SourceBuilder
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
-        sb.AppendLine("                NotDiscovered($\"IRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine("                NotFound(request.GetType(), typeof(TResponse), typeof(global::Davish.Sendr.IRequest<>), $\"IRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
         sb.AppendLine("                return Fault<TResponse>(notFound);");
         sb.AppendLine();
@@ -328,7 +362,7 @@ internal static class SourceBuilder
         sb.AppendLine("        {");
         sb.AppendLine("            if (!_streamHandlers.TryGetValue((request.GetType(), typeof(TResponse)), out var handler))");
         sb.AppendLine("                throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                    NotDiscovered($\"IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine("                    NotFound(request.GetType(), typeof(TResponse), typeof(global::Davish.Sendr.IStreamRequest<>), $\"IStreamRequestHandler<{request.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine();
         sb.AppendLine("            var inner = (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)handler(_sp, request, cancellationToken);");
         sb.AppendLine("            await foreach (var item in inner.WithCancellation(cancellationToken))");
@@ -444,7 +478,7 @@ internal static class SourceBuilder
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
-        sb.AppendLine("                NotDiscovered($\"ICommandHandler<{command.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine("                NotFound(command.GetType(), typeof(TResponse), typeof(global::Davish.Sendr.ICommand<>), $\"ICommandHandler<{command.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
         sb.AppendLine("                return Fault<TResponse>(notFound);");
         sb.AppendLine();
@@ -503,7 +537,7 @@ internal static class SourceBuilder
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            var notFound = new global::System.InvalidOperationException(");
-        sb.AppendLine("                NotDiscovered($\"IQueryHandler<{query.GetType()}, {typeof(TResponse)}>\"));");
+        sb.AppendLine("                NotFound(query.GetType(), typeof(TResponse), typeof(global::Davish.Sendr.IQuery<>), $\"IQueryHandler<{query.GetType()}, {typeof(TResponse)}>\"));");
         sb.AppendLine("            if (!global::Davish.Sendr.SendrActivitySource.IsEnabled)");
         sb.AppendLine("                return Fault<TResponse>(notFound);");
         sb.AppendLine();

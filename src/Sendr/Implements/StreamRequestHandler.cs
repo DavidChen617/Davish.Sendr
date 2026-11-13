@@ -17,7 +17,7 @@ internal sealed class StreamRequestHandlerImpl<TRequest, TResponse> : StreamRequ
         CancellationToken cancellationToken)
     {
         var handler = sp.GetService<IStreamRequestHandler<TRequest, TResponse>>()
-            ?? throw HandlerResolutionException.NoHandler("AddStreamRequestHandler", typeof(TRequest), typeof(TResponse));
+            ?? throw HandlerResolutionException.NoHandler("AddStreamRequestHandler", typeof(TRequest), typeof(TResponse), typeof(IStreamRequest<>));
         return handler.HandleAsync((TRequest)request, cancellationToken);
     }
 }

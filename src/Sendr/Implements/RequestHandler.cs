@@ -41,7 +41,7 @@ internal sealed class RequestHandlerImpl<TRequest, TResponse> : RequestHandler<T
         CancellationToken cancellationToken)
     {
         var handler = sp.GetService<IRequestHandler<TRequest, TResponse>>()
-            ?? throw HandlerResolutionException.NoHandler(nameof(Dependency.AddRequestHandler), typeof(TRequest), typeof(TResponse));
+            ?? throw HandlerResolutionException.NoHandler(nameof(Dependency.AddRequestHandler), typeof(TRequest), typeof(TResponse), typeof(IRequest<>));
         return handler.HandleAsync((TRequest)request, cancellationToken);
     }
 }

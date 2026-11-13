@@ -24,6 +24,27 @@ Davish.Sendr: no handler is registered for '<requestType>' with response '<respo
 `<registrationMethod>` is whichever of `AddRequestHandler`/`AddCommandHandler`/
 `AddQueryHandler`/`AddStreamRequestHandler` matches the message's kind.
 
+#### After a covariant upcast
+
+`IRequest<TResponse>`, `ICommand<TResponse>`, `IQuery<TResponse>`, and
+`IStreamRequest<TResponse>` are covariant, so this compiles:
+
+```csharp
+IQuery<object> query = new StringQuery(); // StringQuery : IQuery<string>
+await sender.SendAsync(query, cancellationToken);
+```
+
+The handler is looked up by the runtime message type and the static response type, here
+`(StringQuery, object)`, so `StringQuery`'s handler is not found. Both the manual and the
+generated sender then report the upcast instead of suggesting a registration:
+
+```text
+Davish.Sendr: no handler is found for '<requestType>' with response 'System.Object': '<RequestType>' declares IQuery<String>, not IQuery<Object>. It was sent as IQuery<Object> (a covariant upcast), so the handler was looked up with 'Object' as the response type. Send it as '<RequestType>' or as an interface it declares.
+```
+
+Fix the call site: send the message as its own type or as an interface it declares. Registering
+another handler for `object` is not the fix.
+
 ### Duplicate registration — `InvalidOperationException`
 
 Thrown when a second handler is registered for the same request/response pair via

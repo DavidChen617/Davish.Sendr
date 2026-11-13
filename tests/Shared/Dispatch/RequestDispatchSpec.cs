@@ -74,6 +74,37 @@ public abstract class RequestDispatchSpec
             .RunAsync();
     }
 
+    // TResponse is covariant, so a message declaring a string response can be sent as one with an object
+    // response; no handler answers object, and the error has to say the upcast is why.
+    private static readonly IReadOnlyDictionary<string, (Type MessageType, Func<ISender, Task<object>> SendUpcast)> UpcastSends =
+        new Dictionary<string, (Type, Func<ISender, Task<object>>)>
+        {
+            ["SendAsync(IRequest<T>)"] = (typeof(DualRequest), s => { IRequest<object> m = new DualRequest(1); return s.SendAsync(m, CancellationToken.None); }),
+            ["SendAsync(ICommand<T>)"] = (typeof(DualCommand), s => { ICommand<object> m = new DualCommand(1); return s.SendAsync(m, CancellationToken.None); }),
+            ["SendAsync(IQuery<T>)"] = (typeof(DualQuery), s => { IQuery<object> m = new DualQuery(1); return s.SendAsync(m, CancellationToken.None); }),
+        };
+
+    public static TheoryData<string> UpcastOverloads => new(UpcastSends.Keys);
+
+    [Theory]
+    [MemberData(nameof(UpcastOverloads))]
+    public async Task GivenMessageSentThroughCovariantUpcast_WhenSendAsync_ThenMessageBlamesTheUpcast(string overload)
+    {
+        var (messageType, sendUpcast) = UpcastSends[overload];
+
+        await new Scenario()
+            .Given<DispatchContext>($"A sender with handlers for {messageType.Name}'s int and string responses", ctx => ctx.Build(AddSenderUnderTest))
+            .When($"{overload} is called with it through a variable whose response type is object, and awaited", ctx => sendUpcast(ctx.Sender))
+            .ThenThrows<InvalidOperationException>("The missing handler is reported")
+                .Contains("The message names the message type", messageType.ToString(), thrown => thrown.Exception.Message)
+                .Contains("The message names a declared response type", "String", thrown => thrown.Exception.Message)
+                .Contains("The message names the requested response type", "Object", thrown => thrown.Exception.Message)
+                .Contains("The message says an upcast caused it", "upcast", thrown => thrown.Exception.Message)
+                .True("The message does not suggest registering a handler", thrown => !thrown.Exception.Message.Contains("services.Add"))
+                .True("The message does not blame discovery", thrown => !thrown.Exception.Message.Contains("discovered by the source generator"))
+            .RunAsync();
+    }
+
     public static TheoryData<string, string> OverloadsByStaticType
     {
         get

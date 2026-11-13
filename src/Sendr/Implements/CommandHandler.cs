@@ -39,7 +39,7 @@ internal sealed class CommandHandlerImpl<TCommand, TResponse> : CommandHandler<T
         CancellationToken cancellationToken)
     {
         var handler = sp.GetService<ICommandHandler<TCommand, TResponse>>()
-            ?? throw HandlerResolutionException.NoHandler("AddCommandHandler", typeof(TCommand), typeof(TResponse));
+            ?? throw HandlerResolutionException.NoHandler("AddCommandHandler", typeof(TCommand), typeof(TResponse), typeof(ICommand<>));
         return handler.HandleAsync((TCommand)command, cancellationToken);
     }
 }

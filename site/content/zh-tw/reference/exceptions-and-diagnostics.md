@@ -23,6 +23,27 @@ Davish.Sendr: no handler is registered for '<requestType>' with response '<respo
 `<registrationMethod>` 會是 `AddRequestHandler`/`AddCommandHandler`/
 `AddQueryHandler`/`AddStreamRequestHandler` 裡，符合該訊息種類的那一個。
 
+#### covariant 轉型之後
+
+`IRequest<TResponse>`、`ICommand<TResponse>`、`IQuery<TResponse>`、
+`IStreamRequest<TResponse>` 都是 covariant，所以下面這段可以編譯：
+
+```csharp
+IQuery<object> query = new StringQuery(); // StringQuery : IQuery<string>
+await sender.SendAsync(query, cancellationToken);
+```
+
+查 handler 時用的是訊息的執行期型別加上靜態的 response 型別，這裡是 `(StringQuery, object)`，
+所以找不到 `StringQuery` 的 handler。這時手動與 generated 兩種 sender 都會指出是轉型造成的，
+不會建議註冊 handler：
+
+```text
+Davish.Sendr: no handler is found for '<requestType>' with response 'System.Object': '<RequestType>' declares IQuery<String>, not IQuery<Object>. It was sent as IQuery<Object> (a covariant upcast), so the handler was looked up with 'Object' as the response type. Send it as '<RequestType>' or as an interface it declares.
+```
+
+要改的是呼叫端：用訊息本身的型別，或它宣告的介面送出。再註冊一個回傳 `object` 的 handler
+解決不了問題。
+
 ### 重複註冊 — `InvalidOperationException`
 
 當透過 `AddRequestHandler`、`AddCommandHandler`、`AddQueryHandler`，或
