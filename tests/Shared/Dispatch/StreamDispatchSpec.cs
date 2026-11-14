@@ -104,6 +104,26 @@ public abstract class StreamDispatchSpec
     }
 
     [Fact]
+    public async Task GivenStreamRequestSentThroughCovariantUpcast_WhenEnumerated_ThenMessageBlamesTheUpcast()
+    {
+        await new Scenario()
+            .Given<StreamContext>("A sender with handlers for DualStream's int and string items", ctx => ctx.Build(AddSenderUnderTest))
+            .When("SendStream is called with it through an IStreamRequest<object> variable, then MoveNextAsync is called once", async ctx =>
+            {
+                IStreamRequest<object> upcast = new DualStream(1);
+                await ctx.StreamSender.SendStream(upcast, CancellationToken.None).GetAsyncEnumerator().MoveNextAsync();
+            })
+            .ThenThrows<InvalidOperationException>("The first MoveNextAsync reports the missing handler")
+                .Contains("The message names the stream request type", typeof(DualStream).ToString(), thrown => thrown.Exception.Message)
+                .Contains("The message names a declared item type", "String", thrown => thrown.Exception.Message)
+                .Contains("The message names the requested item type", "Object", thrown => thrown.Exception.Message)
+                .Contains("The message says an upcast caused it", "upcast", thrown => thrown.Exception.Message)
+                .True("The message does not suggest registering a handler", thrown => !thrown.Exception.Message.Contains("services.Add"))
+                .True("The message does not blame discovery", thrown => !thrown.Exception.Message.Contains("discovered by the source generator"))
+            .RunAsync();
+    }
+
+    [Fact]
     public async Task GivenStreamHandlerThrowsMidEnumeration_WhenEnumerated_ThenEarlierItemsArriveAndOriginalExceptionPropagates()
     {
         await new Scenario()

@@ -24,6 +24,27 @@ Davish.Sendr: no handler is registered for '<requestType>' with response '<respo
 `<registrationMethod>` is whichever of `AddRequestHandler`/`AddCommandHandler`/
 `AddQueryHandler`/`AddStreamRequestHandler` matches the message's kind.
 
+#### After a covariant upcast
+
+`IRequest<TResponse>`, `ICommand<TResponse>`, `IQuery<TResponse>`, and
+`IStreamRequest<TResponse>` are covariant, so this compiles:
+
+```csharp
+IQuery<object> query = new StringQuery(); // StringQuery : IQuery<string>
+await sender.SendAsync(query, cancellationToken);
+```
+
+The handler is looked up by the runtime message type and the static response type, here
+`(StringQuery, object)`, so `StringQuery`'s handler is not found. Both the manual and the
+generated sender then report the upcast instead of suggesting a registration:
+
+```text
+Davish.Sendr: no handler is found for '<requestType>' with response 'System.Object': '<RequestType>' declares IQuery<String>, not IQuery<Object>. It was sent as IQuery<Object> (a covariant upcast), so the handler was looked up with 'Object' as the response type. Send it as '<RequestType>' or as an interface it declares.
+```
+
+Fix the call site: send the message as its own type or as an interface it declares. Registering
+another handler for `object` is not the fix.
+
 ### Duplicate registration — `InvalidOperationException`
 
 Thrown when a second handler is registered for the same request/response pair via
@@ -58,7 +79,7 @@ unchanged. See [Tracing](../guides/tracing.md).
 | ID | Severity | Title | When it fires |
 |---|---|---|---|
 | `SENDR001` | Error | Invalid `[DecorateWith]` usage | A `[DecorateWith<...>]` type argument doesn't implement the decorator interface required for that handler's message kind. |
-| `SENDR002` | Error | Multiple handlers registered for the same request | More than one discovered handler (local and/or from an included assembly) targets the same request/response pair. Does not apply to notification handlers. |
+| `SENDR002` | Error | Multiple handlers registered for the same request | More than one discovered handler (local and/or from an included assembly) targets the same request/response pair. Reported on the handler declared in this project (the other one, if also local, is an additional location); when both come from included assemblies, on the `IncludeAssemblyOf<...>()` call that brought in the second one. Does not apply to notification handlers. |
 | `SENDR003` | Info | Open generic handler is not discovered | An open generic handler class was found and skipped; register a closed constructed type manually instead. |
 | `SENDR004` | Error | Value type cannot be a Davish.Sendr handler | A handler is declared as `struct`/`record struct`. Handler resolution requires a reference type — use `class`/`record class`. |
 | `SENDR005` | Error | Unsupported `UseGenerators()` configuration | An `IncludeAssemblyOf<...>()` call isn't written inline in the `UseGenerators(g => ...)` lambda (e.g. it's behind a delegate variable, method group, loop, conditional, or wrapping helper/extension method), so the generator can't read it from source. |

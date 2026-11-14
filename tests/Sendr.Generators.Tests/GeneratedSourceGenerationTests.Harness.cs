@@ -4,8 +4,8 @@ using Microsoft.CodeAnalysis;
 namespace Sendr.Generators.Tests;
 
 // source-generation through GeneratorHarness: in-memory host and library compilations, for scenarios that would
-// not compile in this project or need another assembly's shape. Only diagnostic ids, severities and messages are
-// checked, never their locations.
+// not compile in this project or need another assembly's shape. Diagnostics are checked by id, severity and
+// message; only SENDR002's tests also check where it is reported.
 public partial class GeneratedSourceGenerationTests
 {
     /// <summary>A host compilation named "Host", with <paramref name="body"/> inside a method that has <c>services</c> in scope.</summary>
@@ -190,6 +190,77 @@ public partial class GeneratedSourceGenerationTests
             """, "LibB", sharedReference);
         return RunHost("services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<LibA.MarkerA>().IncludeAssemblyOf<LibB.MarkerB>()));", "", sharedReference, a, b);
     }
+
+    public static TheoryData<string> DuplicateLocationPlacements => new()
+    {
+        "both in this compilation",
+        "one here and one included",
+        "one here and one included as a live compilation",
+        "two included assemblies",
+    };
+
+    [Theory]
+    [MemberData(nameof(DuplicateLocationPlacements))]
+    public void GivenTwoHandlersForSameMessageAndResponse_WhenGeneratorRuns_ThenSendr002IsReportedWhereTheUserCanFindIt(string placement)
+    {
+        const string localSecond = """
+            public sealed class SecondDupHandler : IQueryHandler<Lib.LibQuery, int> { public Task<int> HandleAsync(Lib.LibQuery query, CancellationToken cancellationToken) => Task.FromResult(2); }
+            """;
+        const string includeLib = "services.AddSendr(o => o.UseGenerators(g => g.IncludeAssemblyOf<Lib.Marker>()));";
+
+        new Scenario()
+            .Given($"Two different handlers for the same message and response, {placement}", () => placement switch
+            {
+                "both in this compilation" => RunHost("services.AddSendr(o => o.UseGenerators());", """
+                    public sealed record Dup : IQuery<int>;
+                    public sealed class FirstDupHandler : IQueryHandler<Dup, int> { public Task<int> HandleAsync(Dup query, CancellationToken cancellationToken) => Task.FromResult(1); }
+                    public sealed class SecondDupHandler : IQueryHandler<Dup, int> { public Task<int> HandleAsync(Dup query, CancellationToken cancellationToken) => Task.FromResult(2); }
+                    """),
+                "one here and one included" => RunHost(includeLib, localSecond, Library(MarkerLibrary)),
+                "one here and one included as a live compilation" => RunHost(includeLib, localSecond, LiveLibrary(MarkerLibrary)),
+                _ => TwoIncludedDuplicates(),
+            })
+            .When("The generator ran", run => run)
+            .Then("SENDR002 points at source in this compilation that the user can open", run =>
+            {
+                Assert.Empty(run.Diagnostics.Where(d => d.Id == "CS8785"));
+                var diagnostic = Assert.Single(run.Sendr("SENDR002"));
+                Assert.True(diagnostic.Location.IsInSource, "SENDR002 has no source location.");
+
+                var (reportedAt, alsoAt) = placement switch
+                {
+                    "both in this compilation" => ("SecondDupHandler", new[] { "FirstDupHandler" }),
+                    "two included assemblies" => ("IncludeAssemblyOf<LibB.MarkerB>()", []),
+                    _ => ("SecondDupHandler", []),
+                };
+                Assert.EndsWith(reportedAt, SourceText(diagnostic.Location));
+                Assert.Equal(alsoAt, diagnostic.AdditionalLocations.Select(SourceText));
+            })
+            .Run();
+    }
+
+    [Fact]
+    public void GivenDuplicateHandlersInTreesWithoutFilePaths_WhenGeneratorRuns_ThenSendr002IsReportedWithoutLocationAndGenerationSucceeds()
+    {
+        new Scenario()
+            .Given("A host whose two syntax trees both have the file path \"\", one of them declaring two handlers for the same query", () =>
+                GeneratorHarness.CompileWithoutPaths("Host", Host("services.AddSendr(o => o.UseGenerators());", """
+                    public sealed record Dup : IQuery<int>;
+                    public sealed class FirstDupHandler : IQueryHandler<Dup, int> { public Task<int> HandleAsync(Dup query, CancellationToken cancellationToken) => Task.FromResult(1); }
+                    public sealed class SecondDupHandler : IQueryHandler<Dup, int> { public Task<int> HandleAsync(Dup query, CancellationToken cancellationToken) => Task.FromResult(2); }
+                    """)))
+            .When("The generator runs", GeneratorHarness.Run)
+            .Then("SENDR002 is reported once, without a source location, and the generator did not fail", run =>
+            {
+                Assert.Empty(run.Diagnostics.Where(d => d.Id == "CS8785"));
+                var diagnostic = Assert.Single(run.Sendr("SENDR002"));
+                Assert.False(diagnostic.Location.IsInSource);
+                Assert.Empty(diagnostic.AdditionalLocations);
+            })
+            .Run();
+    }
+
+    private static string SourceText(Location location) => location.SourceTree!.GetText().ToString(location.SourceSpan);
 
     public static TheoryData<string> TwoResponseFamilies => new() { "IRequest<T>", "ICommand<T>", "IQuery<T>", "IStreamRequest<T>" };
 

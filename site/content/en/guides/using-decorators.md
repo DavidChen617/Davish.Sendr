@@ -120,3 +120,6 @@ public sealed class GetOrderHandler : IRequestHandler<GetOrder, OrderDto>
 generator validates the attribute's type arguments against the decorator interface required
 for that handler's message kind, rejecting a mismatch at compile time (`SENDR001`) — see
 [Exceptions and diagnostics](../reference/exceptions-and-diagnostics.md).
+
+A class that implements several handler interfaces gets the attribute's decorators for every one
+of them; see [Limitations](../reference/limitations.md#one-class-several-handler-interfaces).
