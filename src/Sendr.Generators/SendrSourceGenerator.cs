@@ -98,7 +98,14 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
 
     // Kind is kept even without a Model (an inaccessible, value-type or open generic handler), so an
     // included assembly's results can be split into the sender and publisher sides before reporting.
-    private readonly record struct AnalysisResult(HandlerKind Kind, HandlerModel? Model, ImmutableArray<Diagnostic> Diagnostics);
+    // Span says where a diagnostic about the handler itself (SENDR002) can be reported.
+    private readonly record struct AnalysisResult(
+        HandlerKind Kind, HandlerModel? Model, ImmutableArray<Diagnostic> Diagnostics, HandlerSpan? Span = null);
+
+    // A location in this compilation, kept as plain values (no Location or SyntaxTree) so an analysis
+    // result stays cheap to compare across incremental runs. IsDeclaration is false when it is the
+    // IncludeAssemblyOf<TMarker>() call that brought an external handler in, not the handler itself.
+    private readonly record struct HandlerSpan(string FilePath, TextSpan Span, bool IsDeclaration);
 
     // A single `IncludeAssemblyOf<TMarker>()` call found inside a `UseGenerators(g => ...)`
     // configuration lambda. `Location` is the call's own site, used as the diagnostic/dispatch
@@ -229,6 +236,19 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             ? syntaxRef.GetSyntax().GetLocation()
             : LocationInCompilation(classSymbol, compilation, fallbackLocation);
 
+    /// <summary>
+    /// Turns <paramref name="span"/> back into a <see cref="Location"/> in <paramref name="compilation"/>, or null
+    /// when its file path does not name exactly one syntax tree there (e.g. several in-memory trees without a path).
+    /// </summary>
+    private static Location? ToLocation(HandlerSpan? span, Compilation compilation)
+    {
+        if (span is not { } s)
+            return null;
+
+        var trees = compilation.SyntaxTrees.Where(t => t.FilePath == s.FilePath).Take(2).ToList();
+        return trees.Count == 1 ? Location.Create(trees[0], s.Span) : null;
+    }
+
     /// <summary>SENDR007's wording for <paramref name="type"/>: declared in this project, or in an included assembly.</summary>
     private static DiagnosticDescriptor NotAccessibleDescriptor(INamedTypeSymbol type, Compilation compilation) =>
         SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, compilation.Assembly)
@@ -292,8 +312,14 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         var (decorators, diagnostics) = ExtractDecorators(
             classSymbol, requiredInterfaceSymbol, requiredDisplayName, compilation, fallbackLocation);
 
+        // A local handler has no fallback, so its location is its own declaration; an included one's is
+        // the IncludeAssemblyOf<TMarker>() call, whichever kind of reference brought the assembly in.
+        HandlerSpan? span = location.IsInSource
+            ? new HandlerSpan(location.SourceTree!.FilePath, location.SourceSpan, IsDeclaration: fallbackLocation is null)
+            : null;
+
         var model = new HandlerModel(kind, requestType, responseType, ToGlobalName(classSymbol), decorators);
-        return new AnalysisResult(kind, model, diagnostics);
+        return new AnalysisResult(kind, model, diagnostics, span);
     }
 
     /// <summary>
@@ -634,7 +660,7 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
         // Every other handler kind allows exactly one handler per request type — a second one is
         // ambiguous (SENDR002). Notification handlers are the opposite: any number of classes may
         // handle the same notification type, so they skip this dedup entirely and are all kept.
-        var seen = new Dictionary<(HandlerKind, string, string?), HandlerModel>();
+        var seen = new Dictionary<(HandlerKind, string, string?), AnalysisResult>();
         var deduped = ImmutableArray.CreateBuilder<HandlerModel>();
 
         foreach (var result in allResults)
@@ -654,19 +680,31 @@ public sealed class SendrSourceGenerator : IIncrementalGenerator
             // IQuery<int> and IQuery<string>. Keying on RequestType alone (mirroring the same gap
             // HandlerRegistry's runtime cache had) would misreport that as an ambiguous handler.
             var key = (model.Kind, model.RequestType, model.ResponseType);
-            if (seen.TryGetValue(key, out var existing))
+            if (seen.TryGetValue(key, out var first))
             {
+                var existing = first.Model!;
                 if (existing == model)
                     continue; // The exact same handler (identical decorators too) reached via more than one inclusion path — not a conflict.
 
+                // Point at a handler the user can edit: this one's declaration, else the first one's
+                // (local results come first, so only the first can be local when this one is not), else
+                // the IncludeAssemblyOf<TMarker>() call that brought this one in. The other local
+                // declaration, if any, goes in the additional locations.
+                var declarations = new[] { result.Span, first.Span }
+                    .Where(span => span is { IsDeclaration: true })
+                    .Select(span => ToLocation(span, compilation))
+                    .OfType<Location>()
+                    .ToList();
+
                 spc.ReportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.AmbiguousHandler,
-                    Location.None,
+                    declarations.FirstOrDefault() ?? ToLocation(result.Span, compilation) ?? Location.None,
+                    additionalLocations: declarations.Skip(1),
                     model.RequestType, existing.HandlerType, model.HandlerType));
                 continue;
             }
 
-            seen[key] = model;
+            seen[key] = result;
             deduped.Add(model);
         }
 

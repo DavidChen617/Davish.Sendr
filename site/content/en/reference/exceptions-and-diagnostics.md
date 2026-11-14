@@ -58,7 +58,7 @@ unchanged. See [Tracing](../guides/tracing.md).
 | ID | Severity | Title | When it fires |
 |---|---|---|---|
 | `SENDR001` | Error | Invalid `[DecorateWith]` usage | A `[DecorateWith<...>]` type argument doesn't implement the decorator interface required for that handler's message kind. |
-| `SENDR002` | Error | Multiple handlers registered for the same request | More than one discovered handler (local and/or from an included assembly) targets the same request/response pair. Does not apply to notification handlers. |
+| `SENDR002` | Error | Multiple handlers registered for the same request | More than one discovered handler (local and/or from an included assembly) targets the same request/response pair. Reported on the handler declared in this project (the other one, if also local, is an additional location); when both come from included assemblies, on the `IncludeAssemblyOf<...>()` call that brought in the second one. Does not apply to notification handlers. |
 | `SENDR003` | Info | Open generic handler is not discovered | An open generic handler class was found and skipped; register a closed constructed type manually instead. |
 | `SENDR004` | Error | Value type cannot be a Davish.Sendr handler | A handler is declared as `struct`/`record struct`. Handler resolution requires a reference type — use `class`/`record class`. |
 | `SENDR005` | Error | Unsupported `UseGenerators()` configuration | An `IncludeAssemblyOf<...>()` call isn't written inline in the `UseGenerators(g => ...)` lambda (e.g. it's behind a delegate variable, method group, loop, conditional, or wrapping helper/extension method), so the generator can't read it from source. |
