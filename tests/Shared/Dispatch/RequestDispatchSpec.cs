@@ -153,6 +153,22 @@ public abstract class RequestDispatchSpec
             .RunAsync();
     }
 
+    [Fact]
+    public async Task GivenDerivedCommandAndHandlerOnlyForBase_WhenSendAsync_ThenDerivedIsNotDispatchedToBaseHandler()
+    {
+        await new Scenario()
+            .Given<DispatchContext>("A sender with a handler for BaseOnlyCommand and none for DerivedOfBaseOnlyCommand, which derives from it", ctx => ctx.Build(AddSenderUnderTest))
+            .When("The base command is sent, then the derived command", async ctx =>
+            {
+                await ctx.Sender.SendAsync(new BaseOnlyCommand(1), CancellationToken.None);
+                await ctx.Sender.SendAsync(new DerivedOfBaseOnlyCommand(2), CancellationToken.None);
+            })
+            .ThenThrows<InvalidOperationException>("The derived command has no handler")
+                .Contains("The message names the derived type", nameof(DerivedOfBaseOnlyCommand), thrown => thrown.Exception.Message)
+                .Equal("Only the base command reached the base handler", [nameof(BaseOnlyCommandHandler)], thrown => thrown.State.Probe.Handled)
+            .RunAsync();
+    }
+
     [Theory]
     [MemberData(nameof(DispatchCases.AllOverloads), MemberType = typeof(DispatchCases))]
     public async Task GivenNullMessage_WhenSendAsync_ThenThrowsArgumentNullExceptionWithParamName(string overload)

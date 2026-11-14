@@ -242,6 +242,7 @@ Notes:
 - Multiple handlers for the same request/response pair produce compile error `SENDR002`. A message may implement `IRequest<TResponse>`, `ICommand<TResponse>`, `IQuery<TResponse>`, or `IStreamRequest<TResponse>` with multiple response types; each response type has its own handler slot.
 - The generator also discovers `ICommandHandler` and `IQueryHandler`. It validates their `[DecorateWith<...>]` attributes against the corresponding command or query decorator interface.
 - For `INotificationHandler`, use `AddSendrNotification`. See [Notification: source-generated registration](#notification-source-generated-registration-opt-in).
+- Known limitations (one class implementing several handler interfaces, derived request types, replacing handlers in tests) are listed in the [documentation](https://davidchen617.github.io/Davish.Sendr/reference/limitations/).
 
 ### Cross-assembly discovery
 
