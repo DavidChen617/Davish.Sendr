@@ -33,10 +33,21 @@ internal static class HandlerResolutionException
             return null;
 
         var name = messageInterface.Name.Substring(0, messageInterface.Name.IndexOf('`'));
+        var request = Display(requestType);
+        var response = Display(responseType);
         return $"Davish.Sendr: no handler is found for '{requestType}' with response '{responseType}': " +
-               $"'{requestType.Name}' declares {string.Join(", ", declared.Select(t => $"{name}<{t.Name}>"))}, " +
-               $"not {name}<{responseType.Name}>. It was sent as {name}<{responseType.Name}> (a covariant upcast), " +
-               $"so the handler was looked up with '{responseType.Name}' as the response type. " +
-               $"Send it as '{requestType.Name}' or as an interface it declares.";
+               $"'{request}' declares {string.Join(", ", declared.Select(t => $"{name}<{Display(t)}>"))}, " +
+               $"not {name}<{response}>. It was sent as {name}<{response}> (a covariant upcast), " +
+               $"so the handler was looked up with '{response}' as the response type. " +
+               $"Send it as '{request}' or as an interface it declares.";
+    }
+
+    // List`1 written as List<String>, so a generic response type reads the way it does in code.
+    private static string Display(Type type)
+    {
+        var arity = type.Name.IndexOf('`');
+        return type.IsGenericType && arity >= 0
+            ? $"{type.Name.Substring(0, arity)}<{string.Join(", ", type.GetGenericArguments().Select(Display))}>"
+            : type.Name;
     }
 }

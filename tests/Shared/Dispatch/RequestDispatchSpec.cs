@@ -105,6 +105,22 @@ public abstract class RequestDispatchSpec
             .RunAsync();
     }
 
+    [Fact]
+    public async Task GivenMessageUpcastToGenericResponseType_WhenSendAsync_ThenMessageShowsTheGenericTypeArguments()
+    {
+        await new Scenario()
+            .Given<DispatchContext>("A sender with handlers for DualQuery's int and string responses", ctx => ctx.Build(AddSenderUnderTest))
+            .When("DualQuery is sent through an IQuery<IEnumerable<char>> variable, which string satisfies, and awaited", ctx =>
+            {
+                IQuery<IEnumerable<char>> upcast = new DualQuery(1);
+                return ctx.Sender.SendAsync(upcast, CancellationToken.None);
+            })
+            .ThenThrows<InvalidOperationException>("The upcast is reported")
+                .Contains("The generic response type is written with its type arguments", "IQuery<IEnumerable<Char>>", thrown => thrown.Exception.Message)
+                .True("No CLR arity suffix leaks into the message", thrown => !thrown.Exception.Message.Contains("`1>"))
+            .RunAsync();
+    }
+
     public static TheoryData<string, string> OverloadsByStaticType
     {
         get

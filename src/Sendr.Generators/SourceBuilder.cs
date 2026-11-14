@@ -69,13 +69,29 @@ internal static class SourceBuilder
                         var name = messageInterface.Name.Substring(0, messageInterface.Name.IndexOf('`'));
                         var declaredNames = new string[declared.Count];
                         for (var index = 0; index < declared.Count; index++)
-                            declaredNames[index] = name + "<" + declared[index].Name + ">";
+                            declaredNames[index] = name + "<" + DisplayName(declared[index]) + ">";
 
+                        var request = DisplayName(requestType);
+                        var response = DisplayName(responseType);
                         return "Davish.Sendr: no handler is found for '" + requestType + "' with response '" + responseType + "': " +
-                               "'" + requestType.Name + "' declares " + string.Join(", ", declaredNames) + ", " +
-                               "not " + name + "<" + responseType.Name + ">. It was sent as " + name + "<" + responseType.Name + "> (a covariant upcast), " +
-                               "so the handler was looked up with '" + responseType.Name + "' as the response type. " +
-                               "Send it as '" + requestType.Name + "' or as an interface it declares.";
+                               "'" + request + "' declares " + string.Join(", ", declaredNames) + ", " +
+                               "not " + name + "<" + response + ">. It was sent as " + name + "<" + response + "> (a covariant upcast), " +
+                               "so the handler was looked up with '" + response + "' as the response type. " +
+                               "Send it as '" + request + "' or as an interface it declares.";
+                    }
+
+                    // List`1 written as List<String>, so a generic response type reads the way it does in code.
+                    private static string DisplayName(global::System.Type type)
+                    {
+                        var arity = type.Name.IndexOf('`');
+                        if (!type.IsGenericType || arity < 0)
+                            return type.Name;
+
+                        var arguments = type.GetGenericArguments();
+                        var names = new string[arguments.Length];
+                        for (var index = 0; index < arguments.Length; index++)
+                            names[index] = DisplayName(arguments[index]);
+                        return type.Name.Substring(0, arity) + "<" + string.Join(", ", names) + ">";
                     }
 
             """);
