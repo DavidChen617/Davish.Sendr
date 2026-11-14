@@ -19,7 +19,7 @@ internal sealed class QueryHandlerImpl<TQuery, TResponse> : QueryHandler<TRespon
         CancellationToken cancellationToken)
     {
         var handler = sp.GetService<IQueryHandler<TQuery, TResponse>>()
-            ?? throw HandlerResolutionException.NoHandler("AddQueryHandler", typeof(TQuery), typeof(TResponse));
+            ?? throw HandlerResolutionException.NoHandler("AddQueryHandler", typeof(TQuery), typeof(TResponse), typeof(IQuery<>));
         return handler.HandleAsync((TQuery)query, cancellationToken);
     }
 }
