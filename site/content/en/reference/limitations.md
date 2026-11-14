@@ -59,14 +59,19 @@ How you can swap a handler for a test double depends on how the sender was set u
 | Generated (`UseGenerators()`) | Has no effect: the generated sender resolves the handler class itself | Works, and the handler's `[DecorateWith<...>]` decorators still run |
 
 With the generated sender, the simplest approach is to keep the real handler and replace what it
-depends on. If you need a different handler instance, replace the handler class's registration:
+depends on. If you need a different handler instance, replace the handler class's registration.
+Call `Replace` after `AddSendr`, which is where the handler class is registered:
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection.Extensions; // for Replace
+
+services.AddSendr(o => o.UseGenerators());
 services.Replace(ServiceDescriptor.Transient<GetOrderHandler>(_ => new GetOrderHandler(fakeRepository)));
 ```
 
 A test double that implements a handler interface is itself a handler. If it is declared in a project
-the generator scans (one that calls `UseGenerators()` or is included with `IncludeAssemblyOf<...>()`),
-the generator discovers it and reports `SENDR002` for the duplicate.
+that references Davish.Sendr.Generators, and the real handler is discovered by the same generator run
+(it is in the same project, or in an assembly that project includes with `IncludeAssemblyOf<...>()`),
+the generator reports `SENDR002` for the duplicate.
 
 This may change in a future version.

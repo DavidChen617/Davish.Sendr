@@ -56,14 +56,18 @@ await sender.SendAsync(new DerivedCommand(), ct); // InvalidOperationException�
 | Generated（`UseGenerators()`） | 沒有作用：generated sender 直接解析 handler 類別 | 有效，handler 的 `[DecorateWith<...>]` decorator 照常執行 |
 
 用 generated sender 時，最簡單的做法是保留真正的 handler，替換它依賴的服務。需要不同的 handler
-實例時，替換 handler 類別本身的註冊：
+實例時，替換 handler 類別本身的註冊。handler 類別是在 `AddSendr` 裡註冊的，所以 `Replace` 要在
+`AddSendr` 之後呼叫：
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection.Extensions; // Replace 在這個命名空間
+
+services.AddSendr(o => o.UseGenerators());
 services.Replace(ServiceDescriptor.Transient<GetOrderHandler>(_ => new GetOrderHandler(fakeRepository)));
 ```
 
-實作了 handler 介面的 test double 本身就是一個 handler。它如果宣告在 generator 會掃描的專案裡（呼叫
-`UseGenerators()` 的專案，或用 `IncludeAssemblyOf<...>()` 引入的組件），generator 會找到它，並因為
-重複而報 `SENDR002`。
+實作了 handler 介面的 test double 本身就是一個 handler。它所在的專案如果參考了
+Davish.Sendr.Generators，而真正的 handler 也在同一次 generator 執行中被找到（在同一個專案裡，或在
+這個專案用 `IncludeAssemblyOf<...>()` 引入的組件裡），generator 就會因為重複而報 `SENDR002`。
 
 之後的版本可能會調整這個行為。
